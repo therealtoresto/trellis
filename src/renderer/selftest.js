@@ -12,6 +12,23 @@
   window.addEventListener('unhandledrejection', e => trellis.selftestLog(`console: ${e.reason && e.reason.message ? e.reason.message : e.reason}`));
   await sleep(600);
 
+  // The window buttons must sit on the toolbar's middle line, after every event that makes AppKit move them.
+  const lights = async label => {
+    await sleep(350);
+    const d = await trellis.debugLights();
+    const bar = $('.toolbar').getBoundingClientRect();
+    const mid = bar.top + bar.height / 2;
+    const off = d.centers.map(([, y]) => Math.round((y - mid) * 10) / 10);
+    const ok = d.centers.length === 3 && off.every(o => Math.abs(o) <= 1) && d.centers[2][0] + 7 < bar.left + 94;
+    await trellis.selftestLog(`lights ${label}: ${ok ? 'OK' : 'OFF'} toolbar middle ${mid}, buttons ${JSON.stringify(d.centers.map(([x, y]) => [Math.round(x), Math.round(y * 10) / 10]))}, off by ${JSON.stringify(off)}`);
+  };
+  await lights('at launch');
+  await trellis.selftestResize(1200, 780); await lights('after resize');
+  await trellis.selftestResize(1440, 900); await lights('after resize back');
+  await T.connectTo('example'); await lights('after connect (title change)');
+  await trellis.disconnect(); await lights('after disconnect');
+  if ((await trellis.selftestOnly()) === 'lights') { await trellis.selftestLog('done'); await trellis.selftestDone(); return; }
+
   await step('open connection sheet', async () => [...document.querySelectorAll('.oc-row .cc-name')].map(x => x.innerText.replace(/\s+/g, ' ')));
   await step('new form', async () => { $('[data-oc="new"]').click(); await sleep(100); return $('.sheet-title').textContent; });
   await step('back to list', async () => { $('[data-cf="back"]').click(); await sleep(150); return !!$('.oc-list'); });

@@ -1,6 +1,7 @@
 //! Trellis: windows, the menu, saved connections and one open database per window.
 
 pub mod drivers;
+mod lights;
 mod store;
 
 use drivers::{common::SAMPLE_SQL, err, Changes, Driver, PageOpts, Ref, R};
@@ -13,7 +14,7 @@ use store::Store;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::utils::config::WindowEffectsConfig;
 use tauri::window::{Effect, EffectState};
-use tauri::{AppHandle, Emitter, LogicalPosition, Manager, State, TitleBarStyle, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window};
+use tauri::{AppHandle, Emitter, Manager, State, TitleBarStyle, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
@@ -73,6 +74,7 @@ async fn db_connect(window: Window, state: State<'_, AppState>, id: String) -> R
     state.sessions.lock().await.insert(window.label().to_string(), Arc::new(Mutex::new(Session { driver })));
     let name = conn.get("name").and_then(Value::as_str).unwrap_or("Trellis");
     let _ = window.set_title(&format!("{name} — Trellis"));
+    replace_lights(&window);
     let sample = if conn.get("demo") == Some(&json!(true)) { SAMPLE_SQL } else { "" };
     let mut public = conn.clone();
     if let Some(o) = public.as_object_mut() { o.remove("password"); }
@@ -83,6 +85,7 @@ async fn db_connect(window: Window, state: State<'_, AppState>, id: String) -> R
 async fn db_disconnect(window: Window, state: State<'_, AppState>) -> R<()> {
     state.sessions.lock().await.remove(window.label());
     let _ = window.set_title("Trellis");
+    replace_lights(&window);
     Ok(())
 }
 
@@ -216,7 +219,7 @@ async fn window_new(app: AppHandle, connect_id: Option<String>) -> R<()> {
 
 #[tauri::command]
 fn app_info() -> Value {
-    json!({ "platform": std::env::consts::OS.replace("macos", "darwin"), "vibrancy": cfg!(target_os = "macos"), "selftest": std::env::var("TRELLIS_SELFTEST").is_ok() })
+    json!({ "platform": std::env::consts::OS.replace("macos", "darwin"), "vibrancy": cfg!(target_os = "macos"), "selftest": std::env::var("TRELLIS_SELFTEST").is_ok(), "selftestOnly": std::env::var("TRELLIS_SELFTEST_ONLY").ok() })
 }
 
 /* ---------- self-test ---------- */
@@ -228,6 +231,18 @@ fn selftest_log(text: String) -> R<()> {
     use std::io::Write;
     let mut f = std::fs::OpenOptions::new().create(true).append(true).open(PathBuf::from(dir).join("log.txt")).map_err(err)?;
     writeln!(f, "{text}").map_err(err)
+}
+
+/// Where the window buttons are and where they should be, for the self-test.
+#[tauri::command]
+fn debug_traffic_lights(window: Window) -> Value {
+    let centers = window.app_handle().get_webview_window(window.label()).map(|w| lights::measure(&w)).unwrap_or_default();
+    json!({ "centers": centers, "x": lights::X, "centerY": lights::CENTER_Y })
+}
+
+#[tauri::command]
+fn selftest_resize(window: Window, width: f64, height: f64) -> R<()> {
+    window.set_size(tauri::LogicalSize::new(width, height)).map_err(err)
 }
 
 #[tauri::command]
@@ -254,14 +269,22 @@ fn create_window(app: &AppHandle, connect: Option<String>) -> R<WebviewWindow> {
         b = b
             .title_bar_style(TitleBarStyle::Overlay)
             .hidden_title(true)
-            .traffic_light_position(LogicalPosition::new(30.0, 35.0))
             .transparent(true)
             .effects(WindowEffectsConfig { effects: vec![Effect::UnderWindowBackground], state: Some(EffectState::FollowsWindowActiveState), radius: None, color: None, interactive: false });
     }
     if n > 0 {
         b = b.position(120.0 + (n % 6) as f64 * 28.0, 80.0 + (n % 6) as f64 * 28.0);
     }
-    b.build().map_err(err)
+    let w = b.build().map_err(err)?;
+    lights::place(&w);
+    Ok(w)
+}
+
+/// Puts the window buttons back on the toolbar after AppKit moved them.
+fn replace_lights(window: &Window) {
+    if let Some(w) = window.app_handle().get_webview_window(window.label()) {
+        lights::place(&w);
+    }
 }
 
 fn focused(app: &AppHandle) -> Option<WebviewWindow> {
@@ -386,6 +409,9 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(_) | tauri::WindowEvent::ThemeChanged(_) | tauri::WindowEvent::ScaleFactorChanged { .. }) {
+                replace_lights(window);
+            }
             if let tauri::WindowEvent::Destroyed = event {
                 let state = window.state::<AppState>();
                 let label = window.label().to_string();
@@ -396,7 +422,7 @@ pub fn run() {
             conns_list, conns_save, conns_delete, conns_test,
             db_connect, db_disconnect, db_objects, db_set_schema, db_all_columns, db_structure, db_page, db_query, db_preview, db_apply,
             demo_reset, dialog_open_sqlite, dialog_new_sqlite, file_open_sql, file_read_sql, file_save_sql, file_reveal,
-            clipboard_write, window_new, app_info, selftest_log, selftest_done,
+            clipboard_write, window_new, app_info, selftest_log, selftest_done, debug_traffic_lights, selftest_resize,
         ])
         .run(tauri::generate_context!())
         .expect("Trellis failed to start");

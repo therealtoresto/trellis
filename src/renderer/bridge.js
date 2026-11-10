@@ -39,5 +39,8 @@
     connectOnOpen: () => window.__TRELLIS_CONNECT__ || null,
     selftestLog: text => call('selftest_log', { text }),
     selftestDone: () => call('selftest_done'),
+    debugLights: () => call('debug_traffic_lights'),
+    selftestResize: (width, height) => call('selftest_resize', { width, height }),
+    selftestOnly: async () => (await call('app_info')).selftestOnly,
   };
 })();
