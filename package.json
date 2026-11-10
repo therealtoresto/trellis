@@ -1,0 +1,25 @@
+{
+  "name": "trellis",
+  "productName": "Trellis",
+  "version": "0.2.0",
+  "description": "A database client in liquid glass for macOS: SQLite, PostgreSQL and MySQL. Rust (Tauri 2) with an HTML window.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/therealtoresto/trellis.git"
+  },
+  "homepage": "https://github.com/therealtoresto/trellis",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "icon": "tauri icon assets/icon.png -o src-tauri/icons && rm -rf src-tauri/icons/android src-tauri/icons/ios src-tauri/icons/Square*.png src-tauri/icons/StoreLogo.png src-tauri/icons/icon.ico src-tauri/icons/64x64.png",
+    "demo-db": "node scripts/demo-db.js",
+    "install-app": "tauri build && rm -rf /Applications/Trellis.app && cp -R src-tauri/target/release/bundle/macos/Trellis.app /Applications/"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4",
+    "sql.js": "1.15.1"
+  }
+}

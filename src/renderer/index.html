@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Trellis</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+
+  <div id="app">
+    <header class="toolbar glass" data-tauri-drag-region>
+      <div class="brand"><span class="brand-mark" data-icon="trellis"></span><span class="brand-name">Trellis</span></div>
+      <button class="conn" id="connBtn" aria-haspopup="menu">
+        <span class="conn-dot" id="connDot"></span>
+        <span class="conn-name" id="connName">…</span>
+        <span class="env-tag" id="envTag"></span>
+        <span class="conn-engine" id="connEngine"></span>
+      </button>
+      <span class="tool-sep"></span>
+      <button class="tool" id="newQueryBtn" title="New SQL query (⌘T)"><span data-icon="code"></span><span class="lbl">SQL</span></button>
+      <button class="tool" id="refreshBtn" title="Reload tables and rows (⌘R)"><span data-icon="refresh"></span><span class="lbl">Refresh</span></button>
+      <div class="pending" id="pendingBox" hidden>
+        <span class="pending-count" id="pendingCount"></span>
+        <button class="btn" id="discardBtn">Discard</button>
+        <button class="btn commit" id="reviewBtn">Review<kbd>⌘S</kbd></button>
+      </div>
+      <button class="search-trigger" id="searchTrigger"><span data-icon="search"></span><span>Open anything</span><kbd>⌘P</kbd></button>
+      <button class="tool icon-only on" id="inspectorBtn" title="Show or hide the row inspector (⌘I)" aria-label="Toggle inspector"><span data-icon="inspector"></span></button>
+    </header>
+
+    <div class="layout" id="layout">
+      <aside class="sidebar glass" id="sidebar">
+        <div class="side-panes"><div class="seg" id="sidePanes" role="tablist">
+          <button data-pane="items" class="on">Items</button><button data-pane="queries">Queries</button><button data-pane="history">History</button>
+        </div></div>
+        <div class="side-head">
+          <label class="side-search"><span data-icon="search"></span><input id="tableFilter" placeholder="Search tables" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <div class="side-scroll" id="sideList"></div>
+        <div class="side-foot" id="sideFoot"></div>
+      </aside>
+
+      <main class="workspace glass-strong" id="workspace">
+        <div class="tabs" id="tabs" role="tablist"></div>
+        <div class="tab-body" id="tabBody"></div>
+      </main>
+
+      <aside class="inspector glass" id="inspector"></aside>
+    </div>
+
+    <footer class="status" id="status"></footer>
+  </div>
+
+  <div id="overlay"></div>
+
+  <script src="bridge.js"></script>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

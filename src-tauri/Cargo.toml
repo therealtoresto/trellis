@@ -1,0 +1,36 @@
+[package]
+name = "trellis"
+version = "0.2.0"
+description = "A database client in liquid glass: SQLite, PostgreSQL and MySQL."
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/therealtoresto/trellis"
+authors = ["Taras Bondaruk"]
+publish = false
+
+[lib]
+name = "trellis_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
+tokio-postgres = "0.7"
+postgres-native-tls = "0.5"
+native-tls = "0.2"
+mysql_async = { version = "0.37", features = ["native-tls-tls"] }
+keyring = { version = "3", features = ["apple-native"] }
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+lto = "thin"
+strip = true
