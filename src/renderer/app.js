@@ -152,9 +152,10 @@ async function showOpenConnection(selectId) {
     const ed = e.target.closest('[data-edit]');
     if (ed) return edit(+ed.dataset.edit);
     const r = e.target.closest('.oc-row');
-    if (r) { on = +r.dataset.i; draw(); }
+    if (!r) return;
+    on = +r.dataset.i;
+    if (e.detail >= 2) open(); else markRow(list, on);
   });
-  list.addEventListener('dblclick', e => { const r = e.target.closest('.oc-row'); if (r && !e.target.closest('[data-edit]')) { on = +r.dataset.i; open(); } });
   list.addEventListener('contextmenu', e => { const r = e.target.closest('.oc-row'); if (r) { e.preventDefault(); edit(+r.dataset.i); } });
   ov.querySelector('.sheet-foot').addEventListener('click', e => {
     const b = e.target.closest('[data-oc]');
@@ -510,6 +511,11 @@ function closeTab(id, force = false) {
 }
 
 /* ---------- table data ---------- */
+// Moves the highlight in a connection list without rebuilding its rows.
+function markRow(list, i) {
+  $$('.oc-row', list).forEach(r => { const on = +r.dataset.i === i; r.classList.toggle('on', on); r.setAttribute('aria-selected', on); });
+}
+
 const OPS = [['contains', 'contains'], ['=', '='], ['!=', '≠'], ['<', '<'], ['>', '>'], ['starts', 'starts with'], ['null', 'is NULL'], ['notnull', 'is not NULL']];
 
 function setLoading(on) {
@@ -1930,9 +1936,11 @@ async function wireWelcome() {
     const ed = e.target.closest('[data-edit]');
     if (ed) { const c = W.list[+ed.dataset.edit]; if (c) showConnForm({ ...c }); return; }
     const r = e.target.closest('.wl-row');
-    if (r) { W.on = +r.dataset.i; drawWelcome(); }
+    if (!r) return;
+    W.on = +r.dataset.i;
+    W.selId = W.list[W.on] && W.list[W.on].id;
+    if (e.detail >= 2) open(); else markRow(list, W.on);
   });
-  list.addEventListener('dblclick', e => { const r = e.target.closest('.wl-row'); if (r && !e.target.closest('[data-edit]')) { W.on = +r.dataset.i; open(); } });
   list.addEventListener('contextmenu', e => { const r = e.target.closest('.wl-row'); if (r) { e.preventDefault(); welcomeMenu(e, +r.dataset.i); } });
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-wl]');

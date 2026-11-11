@@ -21,7 +21,7 @@
     const mid = bar.top + bar.height / 2;
     const off = d.centers.map(([, y]) => Math.round((y - mid) * 10) / 10);
     const count = d.onlyClose ? 1 : 3;
-    const ok = d.centers.length === count && off.every(o => Math.abs(o) <= 1);
+    const ok = d.centers.length === count && off.every(o => Math.abs(o) <= 1) && (!d.onlyClose || Math.abs(d.centers[0][0] - d.centers[0][1]) <= 1);
     await trellis.selftestLog(`lights ${label}: ${ok ? 'OK' : 'OFF'} bar middle ${mid}, buttons ${JSON.stringify(d.centers.map(([x, y]) => [Math.round(x), Math.round(y * 10) / 10]))}, off by ${JSON.stringify(off)}`);
   };
   const phase = (v) => { try { if (v === undefined) return localStorage.getItem('trellis:selftest-phase'); localStorage.setItem('trellis:selftest-phase', v); } catch { return null; } };
@@ -51,7 +51,13 @@
     await step('sqlite connection form', async () => { const i = T.W.list.findIndex(c => c.engine === 'sqlite'); $$('.wl-row [data-edit]')[i].click(); return formFits(); });
     await lights('welcome', '.wl-bar');
     await trellis.selftestLog(`windows at launch: ${JSON.stringify(await trellis.debugWindows())}`);
-    await T.connectTo('example');
+    await step('double click opens a connection', async () => {
+      const row = $$('.wl-row')[T.W.list.findIndex(c => c.id === 'example')];
+      const click = detail => row.querySelector('.cc-name').dispatchEvent(new MouseEvent('click', { bubbles: true, detail }));
+      click(1); click(2);
+      await sleep(400);
+      return { stillHere: document.body.dataset.page, windows: await trellis.debugWindows() };
+    });
     return;
   }
 
@@ -87,7 +93,26 @@
       return { ok, drawn, total: T.cur().result.values.length, rowHeight: rows()[0].getBoundingClientRect().height, middle, last, top, jump, msPerScrollFrame: perFrame, worstFrame: Math.round(worst) };
     });
   };
+  // How long the page takes to follow a window resize: from the new size until it has painted at that size.
+  const resizeTiming = async () => {
+    await step('resize follows the window', async () => {
+      await T.openTable({ name: 'players' });
+      await sleep(300);
+      const times = [];
+      for (let k = 0; k < 16; k++) {
+        const w = k % 2 ? 1440 : 1100 + k * 10, h = k % 2 ? 900 : 700;
+        const t = performance.now();
+        const seen = new Promise(r => { const f = () => { removeEventListener('resize', f); r(); }; addEventListener('resize', f); setTimeout(f, 1000); });
+        await trellis.selftestResize(w, h);
+        await seen; await frame(); await frame();
+        times.push(Math.round(performance.now() - t));
+      }
+      times.sort((x, y) => x - y);
+      return { median: times[8], worst: times[15], all: times };
+    });
+  };
   if ((await trellis.selftestOnly()) === 'grid') {
+    await resizeTiming();
     await bigGrid();
     await trellis.selftestLog('done');
     return trellis.selftestDone();
