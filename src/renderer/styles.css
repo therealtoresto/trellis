@@ -593,6 +593,22 @@ kbd {
 .grid tbody tr.vpad td, .grid tbody tr.vpad:hover td { padding: 0; border: 0; background: none !important; }
 .grid tbody tr:hover td:not(.rn) { background: var(--glass-hover); }
 .grid td.num { text-align: right; }
+/* Foreign keys: a link mark in the header, an arrow on hover that opens the row the value names */
+.th-fk { display: inline-grid; place-items: center; color: var(--accent); flex: none; }
+.th-fk .icon { width: 11px; height: 11px; }
+.grid td.fk { position: relative; padding-right: 24px; }
+.fk-go {
+  position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 18px; padding: 0; border: 0; border-radius: 5px;
+  display: none; place-items: center;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.fk-go:hover { color: #fff; background: var(--accent); }
+.fk-go .icon { width: 12px; height: 12px; }
+.grid tr:hover td.fk .fk-go, .grid tr.sel td.fk .fk-go { display: grid; }
+.f-fk { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; padding: 0 2px; border: 0; background: none; color: var(--accent); font: 500 11px var(--sans); }
+.f-fk .icon { width: 11px; height: 11px; }
+.f-fk:hover { text-decoration: underline; }
 .grid td.json { font: 11.5px var(--mono); }
 .grid td.arr { font: 11px var(--mono); }
 /* JSON and Postgres arrays, in the grid and the inspector */

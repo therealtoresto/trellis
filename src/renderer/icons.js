@@ -23,6 +23,8 @@ window.ICONS = {
   columns: '<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6 3v10M10 3v10"/>',
   rowplus: '<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M8 5.8v4.4M5.8 8h4.4"/>',
   plug: '<path d="M6 2v3M10 2v3M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0zM8 11v3"/>',
+  link: '<path d="M6.5 9.5l3-3M7 4.5l1.2-1.2a2.6 2.6 0 0 1 3.7 3.7L10.7 8.2M9 11.5l-1.2 1.2a2.6 2.6 0 0 1-3.7-3.7L5.3 7.8"/>',
+  arrowr: '<path d="M3 8h9.5M9 4.5 12.5 8 9 11.5"/>',
   window: '<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 6h12"/>',
   schema: '<rect x="6" y="1.8" width="4" height="3.4" rx="1"/><rect x="1.8" y="10.8" width="4" height="3.4" rx="1"/><rect x="10.2" y="10.8" width="4" height="3.4" rx="1"/><path d="M8 5.2v2.8M3.8 10.8V8h8.4v2.8"/>',
   updown: '<path d="m5 6 3-3 3 3M5 10l3 3 3-3"/>',

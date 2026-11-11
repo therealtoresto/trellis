@@ -21,6 +21,8 @@ Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScr
 - **Editing** — double-click or Enter edits a cell, Tab moves on, `⌘⇧N` adds a row, `⌘⌫` marks one for deletion.
   `⌘S` shows the SQL and commits it in one transaction; if a statement fails nothing is applied. Rows are matched by
   primary key (SQLite tables without one use `rowid`); tables without a key are read only.
+- **Foreign keys** — a link mark in the column header; the arrow in a cell (on hover or in the selected row) or the
+  link in the inspector opens the referenced table filtered to that row.
 - **Structure** — columns, indexes, foreign keys and the definition (`⌘2`).
 - **SQL** — highlighting, autocomplete (`table.` lists its columns, `schema.` its tables). `⌘↵` runs the selection or
   the statement at the caret (a faint band marks it when the editor holds several), `⌘⇧↵` runs them all, `⌘.` stops a

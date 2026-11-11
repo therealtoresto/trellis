@@ -191,6 +191,28 @@
       } finally { trellis.exportPath = real.path; trellis.writeExport = real.write; }
     });
   };
+  // A foreign key cell opens the row it names in the referenced table.
+  const foreignKeys = async () => {
+    await step('follow a foreign key', async () => {
+      await T.openTable({ name: 'redemptions' });
+      for (let i = 0; i < 40 && !T.cur().fks; i++) await sleep(50);
+      await sleep(100);
+      const ci = T.cur().cols.findIndex(c => c.name === 'player_id');
+      const header = !!$(`#tabBody th[data-ci="${ci}"] .th-fk`);
+      const value = T.cur().model.rows[0].vals[ci];
+      T.selectCell(0, ci); await sleep(50);
+      const btn = $(`#tabBody tr[data-r="0"] td[data-c="${ci}"] .fk-go`);
+      const shown = btn && getComputedStyle(btn).display !== 'none';
+      const inspector = !!$(`#inspector .f-fk[data-fk="${ci}"]`);
+      btn.click();
+      for (let i = 0; i < 40 && !(T.cur().name === 'players' && T.cur().applied.length); i++) await sleep(50);
+      await sleep(200);
+      const t = T.cur();
+      const r = { header, shown, inspector, tab: t.name, filter: t.applied[0], total: t.total, id: t.rows[0] && t.rows[0].vals[0], value };
+      r.ok = header && shown && inspector && t.name === 'players' && t.total === 1 && String(r.id) === String(value);
+      return r;
+    });
+  };
   // How long the page takes to follow a window resize: from the new size until it has painted at that size.
   const resizeTiming = async () => {
     await step('resize follows the window', async () => {
@@ -219,6 +241,7 @@
     await jsonCells();
     await stopAndCap();
     await exports();
+    await foreignKeys();
     await trellis.selftestLog('done');
     return trellis.selftestDone();
   }
@@ -261,6 +284,7 @@
   await jsonCells();
   await stopAndCap();
   await exports();
+  await foreignKeys();
   await step('blob cell', async () => { const t = T.newQueryTab("SELECT x'00ff' AS b, 9007199254740993 AS big, 1.5 AS f, NULL AS n"); T.runActive(); await sleep(300); return [...document.querySelectorAll('.grid tbody td')].map(td => td.textContent); });
 
   const pg = { name: 'Shop — staging', engine: 'postgres', env: 'staging', host: '127.0.0.1', port: 55432, user: 'postgres', password: 'strata', database: 'shop', sslMode: 'prefer' };

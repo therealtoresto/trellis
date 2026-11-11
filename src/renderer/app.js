@@ -536,6 +536,7 @@ async function loadTable(tab) {
     if (tab.cols.length && tab.cols.map(c => c.name).join() !== r.columns.map(c => c.name).join()) tab.widths = [];
     tab.cols = r.columns; tab.rows = r.rows; tab.total = r.total; tab.approximate = r.approximate;
     tab.keyCols = r.keyCols; tab.editable = r.editable && !tab.isView; tab.ms = r.ms; tab.error = null;
+    if (!tab.structure) loadFks(tab);
   } catch (e) {
     if (seq !== tab.seq) return;
     tab.error = e.message; tab.rows = []; tab.total = 0;
@@ -543,6 +544,36 @@ async function loadTable(tab) {
     clearTimeout(slow);
     if (seq === tab.seq) setLoading(false);
   }
+}
+
+// The table's foreign keys, read with its structure in the background; their cells then link to the rows they name.
+function loadFks(tab) {
+  if (tab.fkLoading) return;
+  tab.fkLoading = true;
+  api.structure(tab.ref).then(s => {
+    tab.structure = tab.structure || s;
+    tab.fks = Object.fromEntries((s.fks || []).map(f => [f.column, f]));
+    if (Object.keys(tab.fks).length && cur() === tab && tab.view === 'data') refreshGrid();
+  }).catch(() => {}).finally(() => { tab.fkLoading = false; });
+}
+
+const fkOf = (tab, ci) => tab && tab.kind === 'table' && tab.fks && tab.cols[ci] ? tab.fks[tab.cols[ci].name] : null;
+
+// Opens the table a foreign key points at, filtered to the row this cell names.
+async function followFk(tab, ri, ci) {
+  const fk = fkOf(tab, ci), row = tab.model && tab.model.rows[ri], v = row && row.vals[ci];
+  if (!fk || v === null || v === undefined) return;
+  const dot = fk.table.lastIndexOf('.');
+  const schema = dot > 0 ? fk.table.slice(0, dot) : tab.ref.schema, name = dot > 0 ? fk.table.slice(dot + 1) : fk.table;
+  const obj = [...S.schema.tables, ...S.schema.views].find(t => t.name === name && (!schema || !t.ref.schema || t.ref.schema === schema));
+  const ref = obj ? obj.ref : schema ? { schema, name } : { name };
+  await openTable(ref, false);
+  const t = cur();
+  t.view = 'data';
+  t.filters = [{ col: fk.to, op: '=', val: String(v) }];
+  await applyFilters(t, false);
+  renderAll();
+  toast(`${name} where ${fk.to} = ${shown(v)}`);
 }
 
 async function reloadTab(tab) {
@@ -754,7 +785,10 @@ function rowHTML(tab, r, ri) {
     const cls = [];
     if (r.edited && r.edited.has(ci)) cls.push('edited');
     if (sel && tab.sel.c === ci) cls.push('cur');
-    h += cellHTML(v, cls, ci, tab.model && tab.model.cols[ci]);
+    const fk = v !== null && v !== undefined && fkOf(tab, ci);
+    if (fk) cls.push('fk');
+    const td = cellHTML(v, cls, ci, tab.model && tab.model.cols[ci]);
+    h += fk ? td.slice(0, -5) + `<button class="fk-go" tabindex="-1" data-fk="${ci}" title="Open ${esc(fk.table)} where ${esc(fk.to)} = this">${ic('arrowr')}</button></td>` : td;
   });
   return h + '</tr>';
 }
@@ -819,7 +853,8 @@ function gridHTML(tab, m, win) {
   m.cols.forEach((c, i) => {
     const s = tab.sort && tab.sort.ci === i ? tab.sort.dir : '';
     const type = c.type ? c.type.toLowerCase().replace(/ (auto_increment|default_generated.*)$/, '') : '';
-    h += `<th data-ci="${i}" title="${esc(c.name)}${c.type ? ' · ' + esc(c.type) : ''}"><div class="th-in">${c.pk ? ic('key', 'pk') : ''}<span class="th-name">${esc(c.name)}</span>${type ? `<span class="th-type">${esc(type)}</span>` : ''}<span class="th-sort">${s === 'ASC' ? '▲' : s === 'DESC' ? '▼' : ''}</span></div><span class="rz" data-rz="${i}"></span></th>`;
+    const fk = fkOf(tab, i);
+    h += `<th data-ci="${i}" title="${esc(c.name)}${c.type ? ' · ' + esc(c.type) : ''}"><div class="th-in">${c.pk ? ic('key', 'pk') : ''}${fk ? `<span class="th-fk" title="References ${esc(fk.table)}.${esc(fk.to)}">${ic('link')}</span>` : ''}<span class="th-name">${esc(c.name)}</span>${type ? `<span class="th-type">${esc(type)}</span>` : ''}<span class="th-sort">${s === 'ASC' ? '▲' : s === 'DESC' ? '▼' : ''}</span></div><span class="rz" data-rz="${i}"></span></th>`;
   });
   h += `</tr></thead><tbody>${rowsHTML(tab, m, win)}</tbody></table>`;
   if (!m.rows.length) h += `<div class="grid-empty">${tab.kind === 'table' && tab.applied.length ? 'No rows match these filters.' : tab.kind === 'table' && tab.editable ? 'This table is empty. Add a row with + Row.' : 'No rows.'}</div>`;
@@ -1317,6 +1352,8 @@ function renderInspector() {
     const mono = typeof v === 'number' || /^[[{]/.test(sv) || /int|real|num|dec|serial|uuid/i.test(c.type || '');
     const edited = row.edited && row.edited.has(ci);
     const nullBtn = editable && !c.notnull ? `<button class="btn f-null" data-setnull="${ci}" title="Set to NULL">NULL</button>` : '';
+    const fk = !isNull && fkOf(tab, ci);
+    const fkBtn = fk ? `<button class="f-fk" data-fk="${ci}" title="Open ${esc(fk.table)} where ${esc(fk.to)} = ${esc(sv)}">${ic('arrowr')}${esc(fk.table)}</button>` : '';
     const st = !isNull && structured(v, c);
     if (st) {
       // JSON and arrays open up indented and coloured; the pre behind the textarea draws the colours.
@@ -1327,12 +1364,12 @@ function renderInspector() {
       const kind = st.json ? 'json' : 'arr';
       const type = [c.type ? c.type.toLowerCase() : kind === 'json' ? 'json' : 'array', size].join(' · ');
       return `<div class="field${edited ? ' edited' : ''}" data-c="${ci}">
-      <label class="f-name" for="insp-${ci}">${c.pk ? ic('key', 'pk') : ''}${esc(c.name)} <span class="f-type">${esc(type)}</span></label>
+      <label class="f-name" for="insp-${ci}">${c.pk ? ic('key', 'pk') : ''}${esc(c.name)} <span class="f-type">${esc(type)}</span>${fkBtn}</label>
       <div class="f-row"><div class="f-code" data-kind="${kind}"><pre aria-hidden="true">${(kind === 'json' ? jsonHTML : arrHTML)(text)}</pre><textarea id="insp-${ci}" data-c="${ci}" rows="1" spellcheck="false" ${editable ? '' : 'readonly'} data-null="0">${esc(text)}</textarea></div>${nullBtn}</div>
     </div>`;
     }
     return `<div class="field${edited ? ' edited' : ''}" data-c="${ci}">
-      <label class="f-name" for="insp-${ci}">${c.pk ? ic('key', 'pk') : ''}${esc(c.name)} ${c.type ? `<span class="f-type">${esc(c.type.toLowerCase())}</span>` : ''}</label>
+      <label class="f-name" for="insp-${ci}">${c.pk ? ic('key', 'pk') : ''}${esc(c.name)} ${c.type ? `<span class="f-type">${esc(c.type.toLowerCase())}</span>` : ''}${fkBtn}</label>
       <div class="f-row"><textarea class="f-val${mono ? ' mono' : ''}${isNull ? ' is-null' : ''}" id="insp-${ci}" data-c="${ci}" rows="1" spellcheck="false" ${editable ? '' : 'readonly'} placeholder="${isNull ? 'NULL' : ''}" data-null="${isNull ? 1 : 0}">${esc(sv)}</textarea>${nullBtn}</div>
     </div>`;
   }).join('');
@@ -1982,6 +2019,8 @@ function wireWorkspace() {
   const body = $('#tabBody');
   body.addEventListener('click', async e => {
     const tab = cur();
+    const go = e.target.closest('[data-fk]');
+    if (go && tab) { e.stopPropagation(); const td = go.closest('td[data-c]'); if (td) followFk(tab, +td.parentElement.dataset.r, +go.dataset.fk); return; }
     const act = e.target.closest('[data-act]');
     if (act) {
       const a = act.dataset.act;
@@ -2023,6 +2062,7 @@ function wireWorkspace() {
     }
   });
   body.addEventListener('dblclick', e => {
+    if (e.target.closest('[data-fk]')) return;
     const td = e.target.closest('td[data-c]');
     if (td && !td.classList.contains('editing')) startEdit(+td.parentElement.dataset.r, +td.dataset.c);
   });
@@ -2079,6 +2119,8 @@ function wireWorkspace() {
   });
   insp.addEventListener('click', e => {
     const tab = cur();
+    const go = e.target.closest('[data-fk]');
+    if (go && tab && tab.sel) { e.preventDefault(); return followFk(tab, tab.sel.r, +go.dataset.fk); }
     const n = e.target.closest('[data-setnull]');
     if (n && isEditable(tab) && tab.sel) { stageEdit(tab, tab.sel.r, +n.dataset.setnull, null); refreshGrid(); return; }
     const a = e.target.closest('[data-act]');
