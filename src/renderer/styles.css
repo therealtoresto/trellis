@@ -488,6 +488,7 @@ kbd {
 }
 .tab-add:hover { background: var(--glass-hover); color: var(--fg); transform: rotate(90deg); }
 
+.tab-body:has(> .q-editor) { position: relative; }
 .tab-body {
   flex: 1;
   min-height: 0;

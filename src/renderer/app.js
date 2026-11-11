@@ -1278,8 +1278,8 @@ function renderQueryTab(tab) {
       <div class="stmt-band" aria-hidden="true" hidden></div>
       <pre class="hl" aria-hidden="true"></pre>
       <textarea class="sql-input" spellcheck="false" wrap="off" autocomplete="off" autocapitalize="off" aria-label="SQL query"></textarea>
-      <div class="ac glass-strong" hidden></div>
     </div>
+    <div class="ac glass-strong" hidden></div>
     <div class="hsplit" title="Drag to resize"></div>
     <div class="q-bar">
       <button class="btn primary" data-act="run" id="runBtn"></button>
@@ -1527,7 +1527,24 @@ function caretWord(ta) {
   const before = ta.value.slice(0, pos);
   const m = before.match(/([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z0-9_]*)$/) || before.match(/()([A-Za-z_][A-Za-z0-9_]*)$/);
   if (!m) return null;
-  return { owner: m[1], prefix: m[2], pos };
+  return { owner: m[1], prefix: m[2], pos, sql: ta.value };
+}
+
+/* The tables a script names and their aliases: `FROM cjm.users u`, `JOIN orders AS o`, `UPDATE t`. Each name maps,
+   lower-cased, to {schema, table}; the table's own name maps too. */
+const NOT_ALIAS = new Set('WHERE JOIN LEFT RIGHT INNER OUTER CROSS FULL NATURAL ON USING GROUP ORDER LIMIT OFFSET UNION EXCEPT INTERSECT HAVING WINDOW SET VALUES LATERAL FETCH FOR RETURNING TABLESAMPLE'.split(' '));
+function sqlAliases(sql) {
+  const out = {}, unq = s => s.replace(/^["`]|["`]$/g, '');
+  const name = '(?:"[^"]+"|`[^`]+`|[\\w$]+)';
+  const re = new RegExp(`\\b(?:from|join|update|into)\\s+(${name}(?:\\.${name})?)(?:\\s+(?:as\\s+)?(${name}))?`, 'gi');
+  let m;
+  while ((m = re.exec(sql))) {
+    const parts = m[1].split('.').map(unq);
+    const ref = parts.length > 1 ? { schema: parts[0], table: parts[1] } : { table: parts[0] };
+    out[ref.table.toLowerCase()] = ref;
+    if (m[2] && !NOT_ALIAS.has(m[2].toUpperCase())) out[unq(m[2]).toLowerCase()] = ref;
+  }
+  return out;
 }
 
 function acCandidates(w) {
@@ -1538,6 +1555,13 @@ function acCandidates(w) {
   const keys = Object.keys(cols);
   if (w.owner) {
     const o = w.owner.toLowerCase();
+    // An alias from the script (`FROM cjm.users u` → `u.`) lists that table's columns.
+    const al = sqlAliases(w.sql || '')[o];
+    if (al && al.table.toLowerCase() !== o) {
+      const t = al.table.toLowerCase(), full = `${(al.schema || S.schemaSel || '').toLowerCase()}.${t}`;
+      const key = keys.find(k => k.toLowerCase() === full) || keys.find(k => k.toLowerCase() === t || k.toLowerCase().endsWith('.' + t));
+      if (key) { cols[key].forEach(c => add(c, 'column')); return out.slice(0, 8); }
+    }
     // `schema.` lists that schema's tables; `table.` lists its columns, from the open schema first.
     if (S.schema.schemas.some(sc => sc.toLowerCase() === o)) {
       [...S.schema.tables, ...S.schema.views].filter(t => schemaOf(t).toLowerCase() === o).forEach(t => add(t.name, 'table'));
@@ -1571,7 +1595,8 @@ function measureChar(ed) {
 
 function wireEditor(tab, ta) {
   const ed = ta.parentElement;
-  const ac = $('.ac', ed);
+  // The list sits beside the editor, not in it, so it can hang over the result below instead of being cut off.
+  const ac = $('.ac', ed.parentElement);
   let items = [], on = 0, word = null;
   const hideAc = () => { ac.hidden = true; items = []; };
   const drawAc = () => { ac.innerHTML = items.map((it, i) => `<div class="ac-item${i === on ? ' on' : ''}" data-i="${i}">${it.kind === 'table' ? ic('table') : it.kind === 'column' ? ic('columns') : it.kind === 'schema' ? ic('schema') : ''}<span>${esc(it.word)}</span><span class="k">${it.kind}</span></div>`).join(''); };
@@ -1584,10 +1609,13 @@ function wireEditor(tab, ta) {
     const line = before.length - 1, col = before[before.length - 1].length;
     const x = 52 + (col - word.prefix.length) * measureChar(ed) - ta.scrollLeft;
     const y = 10 + (line + 1) * 20 - ta.scrollTop + 2;
-    ac.style.left = Math.max(44, Math.min(x, ed.clientWidth - 220)) + 'px';
-    ac.style.top = (y + 160 > ed.clientHeight && y > 180 ? y - 20 - items.length * 24 - 10 : y) + 'px';
+    if (y < 0 || y > ed.clientHeight + 2) return hideAc();
     drawAc();
     ac.hidden = false;
+    // Below the caret line; above it only when the window has no room below and the editor has room above.
+    const h = ac.offsetHeight, room = ed.parentElement.clientHeight - ed.offsetTop - y;
+    ac.style.left = ed.offsetLeft + Math.max(44, Math.min(x, ed.clientWidth - 220)) + 'px';
+    ac.style.top = ed.offsetTop + (room < h + 8 && y - 22 > h ? y - 22 - h : y) + 'px';
   };
   const accept = i => {
     const it = items[i];

@@ -167,6 +167,23 @@
       r.ok = r.line1.col === 'first' && r.line3.col === 'second' && r.line1.label === 'Run statement' && r.line1.band && r.all.col === 'second';
       return r;
     });
+    await step('autocomplete knows aliases and is not cut off', async () => {
+      const t = T.newQueryTab(''); await sleep(100);
+      const ed = $('#tabBody .q-editor'); t.editorH = 90; ed.style.height = '90px';
+      const ta = $('#tabBody textarea.sql-input');
+      ta.focus(); ta.value = 'SELECT * FROM players p WHERE p.'; t.sql = ta.value;
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      ta.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '.' }));
+      await sleep(100);
+      const ac = $('#tabBody .ac'), items = $$('#tabBody .ac-item span:first-of-type').map(x => x.textContent);
+      const r = ac.getBoundingClientRect(), er = ed.getBoundingClientRect();
+      const last = $$('#tabBody .ac-item').pop().getBoundingClientRect();
+      const hit = document.elementFromPoint(last.left + 20, last.top + last.height / 2);
+      const res = { items, hidden: ac.hidden, overhang: Math.round(r.bottom - er.bottom), lastVisible: !!(hit && hit.closest('.ac')) };
+      res.ok = !ac.hidden && items.includes('username') && items.includes('country') && res.lastVisible;
+      ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return res;
+    });
     await step('huge result is capped', async () => {
       T.newQueryTab('WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 60000) SELECT i FROM n');
       T.runActive();
