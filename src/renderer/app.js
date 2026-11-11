@@ -587,22 +587,152 @@ function shown(v) {
   return String(v);
 }
 
+/* ---------- JSON and arrays ---------- */
+// A JSON object's or array's tokens, each literal as written so a big number keeps its digits; null for other text.
+const JSON_TOK = /"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}[\]:,]/g;
+function jsonTokens(s) {
+  if (typeof s !== 'string' || s.length > 1e6) return null;
+  const t = s.trimStart()[0];
+  if (t !== '{' && t !== '[') return null;
+  try { JSON.parse(s); } catch { return null; }
+  return s.match(JSON_TOK);
+}
+
+// The tokens on one line the way Postgres prints jsonb ({"a": 1, "b": [1, 2]}), or indented two spaces a level.
+function jsonText(toks, pretty, max = Infinity) {
+  let out = '', depth = 0;
+  const nl = () => pretty ? '\n' + '  '.repeat(depth) : '';
+  for (let i = 0; i < toks.length && out.length <= max; i++) {
+    const t = toks[i];
+    if (t === '{' || t === '[') {
+      if (toks[i + 1] === (t === '{' ? '}' : ']')) { out += t + toks[++i]; continue; }
+      depth++; out += t + nl();
+    } else if (t === '}' || t === ']') { depth--; out += nl() + t; }
+    else if (t === ',') out += ',' + (pretty ? nl() : ' ');
+    else if (t === ':') out += ': ';
+    else out += t;
+  }
+  return out.length > max ? out.slice(0, max) + '…' : out;
+}
+
+// Colours JSON text as it stands, in any layout and even half typed; a string before a colon is a key.
+function jsonHTML(s) {
+  const re = /("(?:[^"\\\n]|\\.)*"?)(?=(\s*:)?)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|([{}[\],:])|([^"{}[\],:\d\-tfn]+|[\s\S])/g;
+  let out = '', m;
+  while ((m = re.exec(s))) {
+    if (m[1]) out += `<span class="${m[2] ? 'j-key' : 'j-str'}">${esc(m[1])}</span>`;
+    else if (m[3]) out += `<span class="j-num">${m[3]}</span>`;
+    else if (m[4]) out += `<span class="j-lit">${m[4]}</span>`;
+    else if (m[5]) out += `<span class="j-p">${m[5]}</span>`;
+    else out += esc(m[6]);
+  }
+  return out;
+}
+
+// A Postgres array as the server prints it ({1,2,"a b",NULL}, {{1,2},{3,4}}): its items, an array for each inner
+// dimension and null for NULL. Null when the text isn't one.
+function pgArray(s) {
+  if (typeof s !== 'string' || s[0] !== '{' || s.length > 1e6) return null;
+  let i = 0;
+  const ws = () => { while (i < s.length && /\s/.test(s[i])) i++; };
+  const list = () => {
+    const items = [];
+    i++; ws();
+    if (s[i] === '}') { i++; return items; }
+    for (;;) {
+      ws();
+      if (s[i] === '{') items.push(list());
+      else if (s[i] === '"') {
+        let v = '';
+        for (i++; i < s.length && s[i] !== '"'; i++) v += s[i] === '\\' ? s[++i] : s[i];
+        if (s[i++] !== '"') throw 0;
+        items.push(v);
+      } else {
+        const j = i;
+        while (i < s.length && !',{}"'.includes(s[i])) i++;
+        const v = s.slice(j, i).trim();
+        if (!v || s[i] === '{' || s[i] === '"') throw 0;
+        items.push(/^null$/i.test(v) ? null : v);
+      }
+      ws();
+      if (s[i] === ',') { i++; continue; }
+      if (s[i++] === '}') return items;
+      throw 0;
+    }
+  };
+  try { const a = list(); ws(); return i === s.length ? a : null; } catch { return null; }
+}
+
+const pgItem = x => Array.isArray(x) ? pgArrayText(x) : x === null ? 'NULL'
+  : x === '' || /[{}",\\\s]/.test(x) || /^null$/i.test(x) ? `"${x.replace(/[\\"]/g, '\\$&')}"` : x;
+// Back to a literal Postgres reads: compact as the server prints it, or one item a line (it skips the spaces).
+const pgArrayText = (a, pretty) => pretty && a.length ? `{\n${a.map(x => '  ' + pgItem(x)).join(',\n')}\n}` : `{${a.map(pgItem).join(',')}}`;
+
+function arrHTML(s) {
+  const re = /("(?:[^"\\]|\\.)*"?)|([{},])|([^{},"]+)/g;
+  let out = '', m;
+  while ((m = re.exec(s))) {
+    if (m[1]) out += `<span class="j-str">${esc(m[1])}</span>`;
+    else if (m[2]) out += `<span class="j-p">${m[2]}</span>`;
+    else {
+      const [, a, w, b] = m[3].match(/^(\s*)([\s\S]*?)(\s*)$/);
+      const cls = /^null$/i.test(w) ? 'j-lit' : /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(w) ? 'j-num' : 'j-str';
+      out += a + (w ? `<span class="${cls}">${esc(w)}</span>` : '') + b;
+    }
+  }
+  return out;
+}
+
+// In the grid an array's items are small tags, so where one ends and the next begins is plain to see.
+function arrCellHTML(a) {
+  if (!a.length) return '<span class="j-p">{}</span>';
+  const item = x => Array.isArray(x) ? `<span class="a-item">${esc(pgArrayText(x))}</span>`
+    : x === null ? '<span class="a-item a-null">NULL</span>'
+    : `<span class="a-item${/^-?\d+(\.\d+)?$/.test(x) ? ' a-num' : ''}">${esc(x.length > 60 ? x.slice(0, 60) + '…' : x)}</span>`;
+  return a.slice(0, 30).map(item).join('') + (a.length > 30 ? `<span class="a-more">+${a.length - 30}</span>` : '');
+}
+
+// Whether a text value reads as JSON or, on Postgres, as an array: by its column's type, then by its shape.
+function structured(v, col) {
+  if (typeof v !== 'string' || v.length < 2) return null;
+  const ty = (col && col.type || '').toLowerCase();
+  const arrTy = /\[\]$|^_|^array\b/.test(ty);
+  if (!arrTy) { const toks = jsonTokens(v); if (toks) return { json: toks }; }
+  if ((arrTy || !ty) && S.info && S.info.engine === 'PostgreSQL') { const a = pgArray(v); if (a) return { arr: a }; }
+  return null;
+}
+
+// What an edit to a formatted field stages: the value as it was when only the layout changed, else the compact form
+// the server prints, or the text as typed once it no longer parses (the server then says what is wrong).
+function fromFormatted(text, kind, orig) {
+  const norm = s => {
+    if (kind === 'json') { const t = jsonTokens(s); return t && jsonText(t, false); }
+    const a = pgArray(s.trim()); return a && pgArrayText(a);
+  };
+  const n = norm(text);
+  if (n === null) return text;
+  return typeof orig === 'string' && norm(orig) === n ? orig : n;
+}
+
 function defaultWidth(c, rows, i) {
   let w = c.name.length * 7.4 + (c.type ? Math.min(c.type.length, 18) * 6.6 + 10 : 0) + (c.pk ? 18 : 0) + 34;
   for (let k = 0; k < Math.min(rows.length, 40); k++) w = Math.max(w, Math.min(shown(rows[k].vals[i]).length, 48) * 7.1 + 24);
   return Math.round(Math.max(64, Math.min(w, 340)));
 }
 
-function cellHTML(v, cls, ci) {
+function cellHTML(v, cls, ci, col) {
   const c = cls.length ? ' ' + cls.join(' ') : '';
   if (v === null || v === undefined) return `<td data-c="${ci}" class="nul${c}"><span class="null">NULL</span></td>`;
   if (blobLen(v) !== null) return `<td data-c="${ci}" class="blob${c}">BLOB · ${blobLen(v)} B</td>`;
   if (typeof v === 'number') return `<td data-c="${ci}" class="num${c}">${fmtNum(v)}</td>`;
   if (typeof v === 'boolean') return `<td data-c="${ci}" class="bool ${v ? 't' : 'f'}${c}">${v}</td>`;
   const s = String(v);
+  // Huge documents stay plain text here, so scrolling never waits on them; the inspector still formats them.
+  const st = s.length <= 20000 && structured(s, col);
+  if (st && st.json) return `<td data-c="${ci}" class="txt json${c}">${jsonHTML(jsonText(st.json, false, 240))}</td>`;
+  if (st && st.arr) return `<td data-c="${ci}" class="txt arr${c}">${arrCellHTML(st.arr)}</td>`;
   const t = s.length > 200 ? s.slice(0, 200) + '…' : s;
-  const j = s[0] === '{' || s[0] === '[' ? ' json' : '';
-  return `<td data-c="${ci}" class="txt${j}${c}">${esc(t)}</td>`;
+  return `<td data-c="${ci}" class="txt${c}">${esc(t)}</td>`;
 }
 
 /* Only the rows near the viewport are in the page: a spacer row above and below stands in for the rest, so a
@@ -624,7 +754,7 @@ function rowHTML(tab, r, ri) {
     const cls = [];
     if (r.edited && r.edited.has(ci)) cls.push('edited');
     if (sel && tab.sel.c === ci) cls.push('cur');
-    h += cellHTML(v, cls, ci);
+    h += cellHTML(v, cls, ci, tab.model && tab.model.cols[ci]);
   });
   return h + '</tr>';
 }
@@ -1180,9 +1310,24 @@ function renderInspector() {
     const sv = isNull ? '' : shown(v);
     const mono = typeof v === 'number' || /^[[{]/.test(sv) || /int|real|num|dec|serial|uuid/i.test(c.type || '');
     const edited = row.edited && row.edited.has(ci);
+    const nullBtn = editable && !c.notnull ? `<button class="btn f-null" data-setnull="${ci}" title="Set to NULL">NULL</button>` : '';
+    const st = !isNull && structured(v, c);
+    if (st) {
+      // JSON and arrays open up indented and coloured; the pre behind the textarea draws the colours.
+      let size;
+      if (st.arr) size = plural(st.arr.length, 'item');
+      else { const o = JSON.parse(v); size = Array.isArray(o) ? plural(o.length, 'item') : plural(Object.keys(o).length, 'key'); }
+      const text = st.json ? jsonText(st.json, true) : pgArrayText(st.arr, true);
+      const kind = st.json ? 'json' : 'arr';
+      const type = [c.type ? c.type.toLowerCase() : kind === 'json' ? 'json' : 'array', size].join(' · ');
+      return `<div class="field${edited ? ' edited' : ''}" data-c="${ci}">
+      <label class="f-name" for="insp-${ci}">${c.pk ? ic('key', 'pk') : ''}${esc(c.name)} <span class="f-type">${esc(type)}</span></label>
+      <div class="f-row"><div class="f-code" data-kind="${kind}"><pre aria-hidden="true">${(kind === 'json' ? jsonHTML : arrHTML)(text)}</pre><textarea id="insp-${ci}" data-c="${ci}" rows="1" spellcheck="false" ${editable ? '' : 'readonly'} data-null="0">${esc(text)}</textarea></div>${nullBtn}</div>
+    </div>`;
+    }
     return `<div class="field${edited ? ' edited' : ''}" data-c="${ci}">
       <label class="f-name" for="insp-${ci}">${c.pk ? ic('key', 'pk') : ''}${esc(c.name)} ${c.type ? `<span class="f-type">${esc(c.type.toLowerCase())}</span>` : ''}</label>
-      <div class="f-row"><textarea class="f-val${mono ? ' mono' : ''}${isNull ? ' is-null' : ''}" id="insp-${ci}" data-c="${ci}" rows="1" spellcheck="false" ${editable ? '' : 'readonly'} placeholder="${isNull ? 'NULL' : ''}" data-null="${isNull ? 1 : 0}">${esc(sv)}</textarea>${editable && !c.notnull ? `<button class="btn f-null" data-setnull="${ci}" title="Set to NULL">NULL</button>` : ''}</div>
+      <div class="f-row"><textarea class="f-val${mono ? ' mono' : ''}${isNull ? ' is-null' : ''}" id="insp-${ci}" data-c="${ci}" rows="1" spellcheck="false" ${editable ? '' : 'readonly'} placeholder="${isNull ? 'NULL' : ''}" data-null="${isNull ? 1 : 0}">${esc(sv)}</textarea>${nullBtn}</div>
     </div>`;
   }).join('');
   el.innerHTML = `<div class="insp-head"><div style="min-width:0"><div class="insp-title">${title}</div><div class="insp-sub">${esc(sub)}</div></div>${state}</div>
@@ -1754,13 +1899,20 @@ function wireWorkspace() {
     if (!ta || !isEditable(tab) || !tab.sel) return;
     const ci = +ta.dataset.c;
     if (ta.dataset.null === '1' && ta.value === '') return;
-    stageEdit(tab, tab.sel.r, ci, coerce(ta.value, tab.cols[ci]));
+    const code = ta.closest('.f-code'), row0 = tab.model.rows[tab.sel.r];
+    stageEdit(tab, tab.sel.r, ci, code ? fromFormatted(ta.value, code.dataset.kind, row0 && row0.orig && row0.orig[ci]) : coerce(ta.value, tab.cols[ci]));
     ta.dataset.null = '0';
     ta.classList.remove('is-null');
     refreshGrid({ inspector: false });
     const row = tab.model.rows[tab.sel.r];
     ta.closest('.field').classList.toggle('edited', !!(row && row.edited && row.edited.has(ci)));
     if (tab.sel) selectCell(tab.sel.r, tab.sel.c, false);
+  });
+  insp.addEventListener('input', e => {
+    const code = e.target.closest('.f-code');
+    if (!code) return;
+    const v = e.target.value;
+    code.firstElementChild.innerHTML = (code.dataset.kind === 'json' ? jsonHTML : arrHTML)(v) + (v.endsWith('\n') ? ' ' : '');
   });
   insp.addEventListener('click', e => {
     const tab = cur();
@@ -1769,7 +1921,13 @@ function wireWorkspace() {
     const a = e.target.closest('[data-act]');
     if (!a || !tab || !tab.sel || !tab.model) return;
     const row = tab.model.rows[tab.sel.r];
-    const obj = Object.fromEntries(tab.model.cols.map((c, i) => [c.name, blobLen(row.vals[i]) !== null ? shown(row.vals[i]) : row.vals[i]]));
+    // A JSON value goes in as JSON rather than as an escaped string, unless a number in it is too big to keep.
+    const asValue = (v, c) => {
+      if (blobLen(v) !== null) return shown(v);
+      const st = structured(v, c);
+      return st && st.json && !st.json.some(t => /^-?\d{16,}/.test(t)) ? JSON.parse(v) : v;
+    };
+    const obj = Object.fromEntries(tab.model.cols.map((c, i) => [c.name, asValue(row.vals[i], c)]));
     if (a.dataset.act === 'copy-json') copy(JSON.stringify(obj, null, 2), 'Row copied as JSON');
     if (a.dataset.act === 'copy-insert') copy(`INSERT INTO ${tab.ref.schema ? qid(tab.ref.schema) + '.' : ''}${qid(tab.ref.name)} (${tab.cols.map(c => qid(c.name)).join(', ')}) VALUES (${row.vals.map(sqlLit).join(', ')});`, 'Row copied as INSERT');
   });

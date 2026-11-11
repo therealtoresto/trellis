@@ -93,6 +93,32 @@
       return { ok, drawn, total: T.cur().result.values.length, rowHeight: rows()[0].getBoundingClientRect().height, middle, last, top, jump, msPerScrollFrame: perFrame, worstFrame: Math.round(worst) };
     });
   };
+  // JSON reads as coloured JSON in the grid and opens up indented in the inspector, and so do Postgres arrays (shown
+  // here by letting the SQLite result pass for a Postgres one).
+  const jsonCells = async () => {
+    await step('json and arrays', async () => {
+      const engine = T.S.info.engine;
+      T.S.info.engine = 'PostgreSQL';
+      T.newQueryTab(`SELECT json_object('id', 7, 'tags', json_array('a', 'b'), 'ok', json('true'), 'none', json('null')) AS doc, '{1,2,"a b",NULL}' AS arr, 'plain' AS t`);
+      T.runActive();
+      for (let i = 0; i < 50 && !(T.cur().result); i++) await sleep(100);
+      await sleep(200);
+      if ($('#inspector').hidden) $('#inspectorBtn').click();
+      T.cur().sel = null; T.selectCell(0, 0); await sleep(200);
+      const tds = $$('#tabBody .grid tbody td[data-c]');
+      const codes = $$('#inspector .f-code');
+      const aligned = codes.map(c => { const [pre, ta] = c.children; return Math.abs(pre.getBoundingClientRect().height - ta.getBoundingClientRect().height) <= 1 && ta.scrollHeight <= ta.clientHeight + 1; });
+      const types = $$('#inspector .f-type').map(x => x.textContent);
+      T.S.info.engine = engine;
+      const r = {
+        grid: tds.map(td => td.className + ': ' + td.textContent),
+        keys: tds[0].querySelectorAll('.j-key').length, tags: tds[1].querySelectorAll('.a-item').length,
+        inspector: codes.map(c => c.querySelector('textarea').value), types, aligned, hidden: $('#inspector').hidden, html: codes.length ? undefined : $('#inspector').innerText.slice(0, 200),
+      };
+      r.ok = r.keys === 4 && r.tags === 4 && codes.length === 2 && aligned.every(Boolean) && r.inspector[1] === '{\n  1,\n  2,\n  "a b",\n  NULL\n}';
+      return r;
+    });
+  };
   // How long the page takes to follow a window resize: from the new size until it has painted at that size.
   const resizeTiming = async () => {
     await step('resize follows the window', async () => {
@@ -118,6 +144,7 @@
   if ((await trellis.selftestOnly()) === 'grid') {
     await resizeTiming();
     await bigGrid();
+    await jsonCells();
     await trellis.selftestLog('done');
     return trellis.selftestDone();
   }
@@ -157,6 +184,7 @@
     return { pending: T.cur().pending.edits.size, country: T.cur().rows[2].vals[3] };
   });
   await bigGrid();
+  await jsonCells();
   await step('blob cell', async () => { const t = T.newQueryTab("SELECT x'00ff' AS b, 9007199254740993 AS big, 1.5 AS f, NULL AS n"); T.runActive(); await sleep(300); return [...document.querySelectorAll('.grid tbody td')].map(td => td.textContent); });
 
   const pg = { name: 'Shop — staging', engine: 'postgres', env: 'staging', host: '127.0.0.1', port: 55432, user: 'postgres', password: 'strata', database: 'shop', sslMode: 'prefer' };

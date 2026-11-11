@@ -593,7 +593,24 @@ kbd {
 .grid tbody tr.vpad td, .grid tbody tr.vpad:hover td { padding: 0; border: 0; background: none !important; }
 .grid tbody tr:hover td:not(.rn) { background: var(--glass-hover); }
 .grid td.num { text-align: right; }
-.grid td.json { font: 11.5px var(--mono); color: var(--muted); }
+.grid td.json { font: 11.5px var(--mono); }
+.grid td.arr { font: 11px var(--mono); }
+/* JSON and Postgres arrays, in the grid and the inspector */
+.j-key { color: var(--syn-id); }
+.j-str { color: var(--syn-str); }
+.j-num { color: var(--syn-num); }
+.j-lit { color: var(--syn-kw); }
+.j-p { color: var(--faint); }
+.a-item {
+  display: inline-block; vertical-align: middle;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+  margin-right: 3px; padding: 0 5px; border-radius: 4px;
+  line-height: 16px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.a-item.a-num { color: var(--syn-num); }
+.a-item.a-null { color: var(--faint); font-style: italic; }
+.a-more { color: var(--faint); font-size: 10.5px; margin-left: 2px; }
 .grid td.blob { color: var(--faint); font-style: italic; }
 .null {
   font: 500 10px/1 var(--mono);
@@ -825,6 +842,29 @@ kbd {
 .f-val[readonly] { background: transparent; box-shadow: none; }
 .f-val.is-null::placeholder { color: var(--faint); font: 500 11px var(--mono); }
 .field.edited .f-val { border-color: color-mix(in srgb, var(--modified) 60%, transparent); background: color-mix(in srgb, var(--modified) 12%, transparent); }
+.f-code {
+  flex: 1; min-width: 0;
+  display: grid;
+  max-height: 420px; overflow: auto;
+  border-radius: 8px;
+  border: 1px solid var(--glass-edge-soft);
+  background: var(--input-bg);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.1);
+}
+/* The textarea lies over the coloured copy, letter for letter; the box around both scrolls them together. */
+.f-code > pre, .f-code > textarea {
+  grid-area: 1 / 1;
+  margin: 0; padding: 6px 9px; border: 0;
+  font: 11.5px/1.5 var(--mono);
+  white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2;
+}
+.f-code > textarea {
+  min-height: 0; overflow: hidden; resize: none; outline: none;
+  background: transparent; color: transparent; caret-color: var(--fg);
+}
+.f-code:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent); }
+.f-code:has(textarea[readonly]) { background: color-mix(in srgb, var(--fg) 4%, transparent); box-shadow: none; }
+.field.edited .f-code { border-color: color-mix(in srgb, var(--modified) 60%, transparent); background: color-mix(in srgb, var(--modified) 12%, transparent); }
 .f-null { height: 28px; padding: 0 7px; font: 600 10px var(--mono); }
 .insp-foot { display: flex; gap: 6px; padding: 8px 10px 10px; border-top: 1px solid var(--glass-edge-soft); flex: none; flex-wrap: wrap; }
 .insp-empty { flex: 1; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
