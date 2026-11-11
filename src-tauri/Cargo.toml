@@ -1,7 +1,7 @@
 [package]
 name = "trellis"
 version = "0.2.0"
-description = "A database client in liquid glass: SQLite, PostgreSQL and MySQL."
+description = "A database client for macOS: SQLite, PostgreSQL and MySQL."
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/therealtoresto/trellis"

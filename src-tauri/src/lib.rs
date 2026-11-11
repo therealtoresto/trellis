@@ -29,6 +29,9 @@ struct AppState {
     sessions: Mutex<HashMap<String, Arc<Mutex<Session>>>>,
 }
 
+/// Set once the app is quitting, so closing its last workspace does not bring the welcome window back.
+static QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 static WINDOWS: AtomicUsize = AtomicUsize::new(0);
 
 async fn session(state: &AppState, window: &Window) -> R<Arc<Mutex<Session>>> {
@@ -222,6 +225,70 @@ fn app_info() -> Value {
     json!({ "platform": std::env::consts::OS.replace("macos", "darwin"), "vibrancy": cfg!(target_os = "macos"), "selftest": std::env::var("TRELLIS_SELFTEST").is_ok(), "selftestOnly": std::env::var("TRELLIS_SELFTEST_ONLY").ok() })
 }
 
+/* ---------- welcome window ---------- */
+
+/// What the welcome window shows under the logo.
+#[tauri::command]
+fn about_info() -> Value {
+    let built = env!("TRELLIS_BUILT");
+    json!({
+        "name": "Trellis",
+        "version": env!("CARGO_PKG_VERSION"),
+        "commit": env!("TRELLIS_COMMIT"),
+        "built": built,
+        "developer": env!("CARGO_PKG_AUTHORS"),
+        "license": env!("CARGO_PKG_LICENSE"),
+        "year": &built[..4.min(built.len())],
+    })
+}
+
+/// Opens a database in a workspace window and puts the welcome window away.
+#[tauri::command]
+async fn open_connection_window(app: AppHandle, id: String) -> R<()> {
+    create_window(&app, Some(id))?;
+    if let Some(w) = app.get_webview_window("welcome") {
+        let _ = w.close();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn show_welcome(app: AppHandle) -> R<()> {
+    create_welcome(&app)
+}
+
+/// The first thing Trellis shows: the logo and version on the left, saved connections on the right.
+fn create_welcome(app: &AppHandle) -> R<()> {
+    if let Some(w) = app.get_webview_window("welcome") {
+        let _ = w.show();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    let mut b = WebviewWindowBuilder::new(app, "welcome", WebviewUrl::App("welcome.html".into()))
+        .title("Welcome to Trellis")
+        .inner_size(800.0, 500.0)
+        .resizable(false)
+        .maximizable(false)
+        .center()
+        .disable_drag_drop_handler();
+    #[cfg(target_os = "macos")]
+    {
+        b = b
+            .title_bar_style(TitleBarStyle::Overlay)
+            .hidden_title(true)
+            .transparent(true)
+            .effects(WindowEffectsConfig { effects: vec![Effect::UnderWindowBackground], state: Some(EffectState::FollowsWindowActiveState), radius: None, color: None, interactive: false });
+    }
+    let w = b.build().map_err(err)?;
+    lights::place(&w);
+    Ok(())
+}
+
+#[tauri::command]
+fn debug_windows(app: AppHandle) -> Value {
+    json!(app.webview_windows().iter().map(|(label, w)| json!({ "label": label, "visible": w.is_visible().unwrap_or(false) })).collect::<Vec<_>>())
+}
+
 /* ---------- self-test ---------- */
 
 #[tauri::command]
@@ -237,7 +304,8 @@ fn selftest_log(text: String) -> R<()> {
 #[tauri::command]
 fn debug_traffic_lights(window: Window) -> Value {
     let centers = window.app_handle().get_webview_window(window.label()).map(|w| lights::measure(&w)).unwrap_or_default();
-    json!({ "centers": centers, "x": lights::X, "centerY": lights::CENTER_Y })
+    let spec = lights::spec(window.label());
+    json!({ "centers": centers, "x": spec.x, "centerY": spec.center_y, "onlyClose": spec.only_close })
 }
 
 #[tauri::command]
@@ -362,7 +430,12 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::fullscreen(app, None)?,
         ],
     )?;
-    let window = Submenu::with_items(app, "Window", true, &[&PredefinedMenuItem::minimize(app, None)?, &PredefinedMenuItem::maximize(app, None)?])?;
+    let window = Submenu::with_items(
+        app,
+        "Window",
+        true,
+        &[&PredefinedMenuItem::minimize(app, None)?, &PredefinedMenuItem::maximize(app, None)?, &PredefinedMenuItem::separator(app)?, &it("welcome", "Welcome to Trellis", Some("CmdOrCtrl+Shift+1"))?],
+    )?;
     let about = Submenu::with_items(
         app,
         "Trellis",
@@ -397,6 +470,7 @@ pub fn run() {
                 let id = event.id().as_ref().to_string();
                 match id.as_str() {
                     "new-window" => { let _ = create_window(app, None); }
+                    "welcome" => { let _ = create_welcome(app); }
                     "close-window" => { if let Some(w) = focused(app) { let _ = w.close(); } }
                     _ => {
                         if let Some(w) = focused(app) {
@@ -405,7 +479,7 @@ pub fn run() {
                     }
                 }
             });
-            create_window(&handle, None)?;
+            create_welcome(&handle)?;
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -416,14 +490,28 @@ pub fn run() {
                 let state = window.state::<AppState>();
                 let label = window.label().to_string();
                 tauri::async_runtime::block_on(async { state.sessions.lock().await.remove(&label); });
+                // Closing the last workspace brings the welcome window back, as in TablePlus.
+                let app = window.app_handle();
+                let workspaces = app.webview_windows().keys().filter(|l| l.starts_with("trellis-") && **l != label).count();
+                if label.starts_with("trellis-") && workspaces == 0 && !QUITTING.load(Ordering::SeqCst) {
+                    let _ = create_welcome(app);
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
             conns_list, conns_save, conns_delete, conns_test,
             db_connect, db_disconnect, db_objects, db_set_schema, db_all_columns, db_structure, db_page, db_query, db_preview, db_apply,
             demo_reset, dialog_open_sqlite, dialog_new_sqlite, file_open_sql, file_read_sql, file_save_sql, file_reveal,
-            clipboard_write, window_new, app_info, selftest_log, selftest_done, debug_traffic_lights, selftest_resize,
+            clipboard_write, window_new, app_info, selftest_log, selftest_done, debug_traffic_lights, selftest_resize, about_info, open_connection_window, show_welcome, debug_windows,
         ])
-        .run(tauri::generate_context!())
-        .expect("Trellis failed to start");
+        .build(tauri::generate_context!())
+        .expect("Trellis failed to start")
+        .run(|app, event| match event {
+            // Closing the welcome window with nothing else open keeps Trellis in the Dock; ⌘Q still quits.
+            tauri::RunEvent::ExitRequested { code: None, api, .. } if !QUITTING.load(Ordering::SeqCst) => api.prevent_exit(),
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => QUITTING.store(true, Ordering::SeqCst),
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { has_visible_windows: false, .. } => { let _ = create_welcome(app); }
+            _ => {}
+        });
 }

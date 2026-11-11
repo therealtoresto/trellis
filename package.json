@@ -2,7 +2,7 @@
   "name": "trellis",
   "productName": "Trellis",
   "version": "0.2.0",
-  "description": "A database client in liquid glass for macOS: SQLite, PostgreSQL and MySQL. Rust (Tauri 2) with an HTML window.",
+  "description": "A database client for macOS: SQLite, PostgreSQL and MySQL. Rust (Tauri 2) with an HTML window.",
   "repository": {
     "type": "git",
     "url": "https://github.com/therealtoresto/trellis.git"

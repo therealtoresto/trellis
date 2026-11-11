@@ -12,22 +12,52 @@
   window.addEventListener('unhandledrejection', e => trellis.selftestLog(`console: ${e.reason && e.reason.message ? e.reason.message : e.reason}`));
   await sleep(600);
 
-  // The window buttons must sit on the toolbar's middle line, after every event that makes AppKit move them.
-  const lights = async label => {
+  // The window buttons must sit on the middle line of the bar beside them, after every event that makes AppKit move them.
+  const lights = async (label, barSel = '.toolbar') => {
     await sleep(350);
     const d = await trellis.debugLights();
-    const bar = $('.toolbar').getBoundingClientRect();
+    const bar = $(barSel).getBoundingClientRect();
     const mid = bar.top + bar.height / 2;
     const off = d.centers.map(([, y]) => Math.round((y - mid) * 10) / 10);
-    const ok = d.centers.length === 3 && off.every(o => Math.abs(o) <= 1) && d.centers[2][0] + 7 < bar.left + 94;
-    await trellis.selftestLog(`lights ${label}: ${ok ? 'OK' : 'OFF'} toolbar middle ${mid}, buttons ${JSON.stringify(d.centers.map(([x, y]) => [Math.round(x), Math.round(y * 10) / 10]))}, off by ${JSON.stringify(off)}`);
+    const count = d.onlyClose ? 1 : 3;
+    const ok = d.centers.length === count && off.every(o => Math.abs(o) <= 1);
+    await trellis.selftestLog(`lights ${label}: ${ok ? 'OK' : 'OFF'} bar middle ${mid}, buttons ${JSON.stringify(d.centers.map(([x, y]) => [Math.round(x), Math.round(y * 10) / 10]))}, off by ${JSON.stringify(off)}`);
   };
-  await lights('at launch');
+  const phase = (v) => { try { if (v === undefined) return localStorage.getItem('trellis:selftest-phase'); localStorage.setItem('trellis:selftest-phase', v); } catch { return null; } };
+
+  // Welcome window: the launch window. It hands the chosen connection to a new workspace window and closes.
+  if (document.body.dataset.page === 'welcome') {
+    if (phase() === 'reopen') {
+      await trellis.selftestLog(`welcome back after the last workspace closed: ${JSON.stringify(await trellis.debugWindows())}`);
+      phase('');
+      await trellis.selftestLog('done');
+      return trellis.selftestDone();
+    }
+    phase('');
+    await step('welcome lists connections', async () => [...document.querySelectorAll('.wl-row .cc-name')].map(x => x.innerText.replace(/\s+/g, ' ')));
+    await step('welcome shows the build', async () => [$('#wlVersion').textContent, $('#wlDev').textContent]);
+    await step('new connection form', async () => { $('.wl-action[data-wl="new"]').click(); await sleep(150); const t = $('.sheet-title').textContent; $('[data-cf="cancel"]').click(); return t; });
+    await lights('welcome', '.wl-bar');
+    await trellis.selftestLog(`windows at launch: ${JSON.stringify(await trellis.debugWindows())}`);
+    await T.connectTo('example');
+    return;
+  }
+
+  // Workspace window, opened from the welcome window with the example connection.
+  for (let i = 0; i < 50 && !T.S.conn; i++) await sleep(100);
+  await sleep(300);
+  await trellis.selftestLog(`workspace opened on ${T.S.conn && T.S.conn.name}: ${JSON.stringify(await trellis.debugWindows())}`);
+  await lights('in the workspace');
   await trellis.selftestResize(1200, 780); await lights('after resize');
   await trellis.selftestResize(1440, 900); await lights('after resize back');
-  await T.connectTo('example'); await lights('after connect (title change)');
-  await trellis.disconnect(); await lights('after disconnect');
-  if ((await trellis.selftestOnly()) === 'lights') { await trellis.selftestLog('done'); await trellis.selftestDone(); return; }
+  await trellis.disconnect(); await T.connectTo('example'); await lights('after reconnect (title change)');
+  if ((await trellis.selftestOnly()) === 'lights') {
+    // Closing the only workspace brings the welcome window back; it finishes the test.
+    phase('reopen');
+    await trellis.closeWindow();
+    return;
+  }
+  await T.showOpenConnection();
 
   await step('open connection sheet', async () => [...document.querySelectorAll('.oc-row .cc-name')].map(x => x.innerText.replace(/\s+/g, ' ')));
   await step('new form', async () => { $('[data-oc="new"]').click(); await sleep(100); return $('.sheet-title').textContent; });

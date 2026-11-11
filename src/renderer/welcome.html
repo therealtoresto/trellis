@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Welcome to Trellis</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="welcome">
+  <div class="ambient" aria-hidden="true"></div>
+
+  <div class="welcome">
+    <aside class="wl-side" data-tauri-drag-region>
+      <div class="wl-brand" data-tauri-drag-region>
+        <svg class="wl-mark" viewBox="100 100 824 824" aria-label="Trellis">
+          <defs>
+            <linearGradient id="mbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4b8dff"/><stop offset=".58" stop-color="#8b5cf6"/><stop offset="1" stop-color="#14b8a6"/></linearGradient>
+            <linearGradient id="msheen" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".5" stop-color="#fff" stop-opacity=".04"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+            <clipPath id="mframe"><rect x="282" y="282" width="460" height="460" rx="64"/></clipPath>
+          </defs>
+          <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#mbg)"/>
+          <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#msheen)"/>
+          <g clip-path="url(#mframe)" stroke="#fff" stroke-width="30">
+            <path opacity=".62" d="M282 412 412 282M282 542 542 282M282 672 672 282M352 742 742 352M482 742 742 482M612 742 742 612"/>
+            <path d="M412 742 282 612M542 742 282 482M672 742 282 352M742 672 352 282M742 542 482 282M742 412 612 282"/>
+          </g>
+          <rect x="282" y="282" width="460" height="460" rx="64" fill="none" stroke="#fff" stroke-width="32"/>
+        </svg>
+        <h1 class="wl-name">Trellis</h1>
+        <div class="wl-version" id="wlVersion">Version</div>
+        <div class="wl-dev" id="wlDev"></div>
+      </div>
+      <div class="wl-actions">
+        <button class="wl-action" data-wl="new"><span data-icon="plus"></span>New Connection</button>
+        <button class="wl-action" data-wl="sqlite"><span data-icon="folder"></span>Open SQLite File</button>
+      </div>
+    </aside>
+
+    <main class="wl-main">
+      <div class="wl-bar" data-tauri-drag-region>
+        <div class="wl-tools">
+          <button class="icon-btn" data-wl="new" title="New connection" aria-label="New connection"><span data-icon="plus"></span></button>
+          <button class="icon-btn" data-wl="sqlite" title="Open a SQLite file" aria-label="Open a SQLite file"><span data-icon="folder"></span></button>
+        </div>
+        <label class="side-search wl-search"><span data-icon="search"></span><input id="wlFilter" placeholder="Search for connection…" autocomplete="off" spellcheck="false"></label>
+      </div>
+      <div class="wl-list" id="wlList" role="listbox" aria-label="Saved connections"></div>
+      <div class="wl-foot"><span class="cf-status" id="sheetStatus"></span><span class="spacer"></span><span><kbd>↵</kbd> open · right-click for more</span></div>
+    </main>
+  </div>
+
+  <div id="overlay"></div>
+
+  <script src="bridge.js"></script>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

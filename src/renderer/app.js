@@ -3,6 +3,8 @@
 'use strict';
 
 const api = window.trellis;
+// The same script runs the welcome window (logo and saved connections) and the workspace windows.
+const WELCOME = document.body.dataset.page === 'welcome';
 
 /* ---------- helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -19,7 +21,7 @@ const refKey = ref => (ref.schema ? ref.schema + '.' : '') + ref.name;
 const WRITE_RE = /\b(insert|update|delete|create|drop|alter|replace|truncate|vacuum|attach|detach|grant|revoke|rename|merge|call)\b/i;
 const isWrite = sql => WRITE_RE.test(sql.replace(/'(?:[^']|'')*'/g, '').replace(/--[^\n]*/g, ''));
 const ENV = { local: 'Local', dev: 'Development', staging: 'Staging', production: 'Production' };
-const ENGINE = { postgres: { label: 'PostgreSQL', short: 'PG', port: 5432, user: 'postgres' }, mysql: { label: 'MySQL', short: 'MY', port: 3306, user: 'root' }, sqlite: { label: 'SQLite', short: 'SQ' } };
+const ENGINE = { postgres: { label: 'PostgreSQL', short: 'Pg', port: 5432, user: 'postgres' }, mysql: { label: 'MySQL', short: 'My', port: 3306, user: 'root' }, sqlite: { label: 'SQLite', short: 'Sq' } };
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem('trellis:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -233,7 +235,7 @@ function showConnForm(form, fromList = false) {
         const back = () => showConnForm(f, fromList);
         return showModal({
           title: `Delete “${f.name}”?`, text: 'The saved connection and its Keychain password are removed. The database itself is not touched.',
-          actions: [{ label: 'Cancel', run: () => { back(); return false; } }, { label: 'Delete', cls: 'danger', primary: true, run: async () => { await api.deleteConnection(f.id); toast('Connection deleted'); showOpenConnection(); return false; } }],
+          actions: [{ label: 'Cancel', run: () => { back(); return false; } }, { label: 'Delete', cls: 'danger', primary: true, run: async () => { await api.deleteConnection(f.id); toast('Connection deleted'); if (WELCOME) { closeOverlay(); renderWelcome(); } else showOpenConnection(); return false; } }],
         });
       }
       const problem = f.engine === 'sqlite' ? (!f.file && 'Choose a SQLite file first.') : (!f.host && 'Enter a host.');
@@ -244,7 +246,7 @@ function showConnForm(form, fromList = false) {
         sheetStatus('good', `Connected · ${info.engine} ${info.version}${info.tls ? ' · ' + info.tls : ''}`);
       } else if (act === 'save') {
         const saved = await saveForm();
-        if (fromList) showOpenConnection(saved.id); else { closeOverlay(); toast('Connection saved'); }
+        if (fromList) showOpenConnection(saved.id); else { closeOverlay(); toast('Connection saved'); if (WELCOME) renderWelcome(saved.id); }
       } else if (act === 'connect') {
         const saved = await saveForm();
         await connectTo(saved.id);
@@ -286,6 +288,12 @@ async function saveForm() {
 
 async function connectTo(id, force = false) {
   if (S.busy) return;
+  // From the welcome window a connection opens in its own workspace window.
+  if (WELCOME) {
+    store.set('lastConn', id);
+    try { await api.openConnectionWindow(id); } catch (e) { sheetStatus('bad', e.message); }
+    return;
+  }
   if (S.conn && !force && unsavedCount()) return guardPending(() => connectTo(id, true));
   S.busy = true;
   sheetStatus('', 'Connecting…');
@@ -1771,12 +1779,119 @@ function onMenu(action) {
   }
 }
 
+
+/* ================================================================
+   Welcome window
+   ================================================================ */
+const W = { list: [], on: 0, selId: null };
+
+async function renderWelcome(selectId) {
+  S.conns = await api.connections();
+  const f = $('#wlFilter').value.trim().toLowerCase();
+  W.list = S.conns.filter(c => !f || `${c.name} ${connSub(c)} ${c.env}`.toLowerCase().includes(f));
+  const want = selectId || W.selId || store.get('lastConn');
+  const i = W.list.findIndex(c => c.id === want);
+  W.on = i >= 0 ? i : Math.min(W.on, Math.max(0, W.list.length - 1));
+  drawWelcome();
+}
+
+function drawWelcome() {
+  const list = $('#wlList');
+  W.selId = W.list[W.on] && W.list[W.on].id;
+  list.innerHTML = W.list.length ? W.list.map((c, i) => `
+    <div class="oc-row wl-row${i === W.on ? ' on' : ''}" data-i="${i}" role="option" aria-selected="${i === W.on}">
+      <span class="eng-badge ${c.engine}" style="--status:${esc(colorOf(c))}">${ENGINE[c.engine].short}</span>
+      <span class="cc-text"><span class="cc-name">${esc(c.name || 'Untitled')} ${envPill(c)}</span><span class="cc-sub">${esc(connSub(c))}</span></span>
+      <button class="icon-btn oc-edit" data-edit="${i}" title="Edit connection" aria-label="Edit ${esc(c.name)}">${ic('pencil')}</button>
+    </div>`).join('')
+    : `<div class="oc-empty">${S.conns.length ? 'No connection matches.' : 'No connections yet.<br>Press + to add one.'}</div>`;
+  const el = $('.wl-row.on', list);
+  if (el) el.scrollIntoView({ block: 'nearest' });
+}
+
+function welcomeMenu(e, i) {
+  const c = W.list[i];
+  if (!c) return;
+  W.on = i; drawWelcome();
+  const ov = $('#overlay');
+  ov.innerHTML = `<div class="scrim" data-scrim style="background:transparent;animation:none;backdrop-filter:none;-webkit-backdrop-filter:none"></div><div class="menu glass-strong" role="menu" style="min-width:200px;top:${Math.min(e.clientY, innerHeight - 170)}px;left:${Math.min(e.clientX, innerWidth - 220)}px">
+    <button class="menu-item" data-m="open">${ic('plug')}<span>Open</span><span class="mi-sub">↵</span></button>
+    <button class="menu-item" data-m="edit">${ic('pencil')}<span>Edit…</span></button>
+    <button class="menu-item" data-m="copy">${ic('copy')}<span>Duplicate</span></button>
+    <div class="menu-sep"></div>
+    <button class="menu-item danger" data-m="delete">${ic('trash')}<span>Delete…</span></button>
+  </div>`;
+  $('[data-scrim]', ov).addEventListener('mousedown', closeOverlay);
+  $$('[data-m]', ov).forEach(b => b.addEventListener('click', async () => {
+    closeOverlay();
+    const m = b.dataset.m;
+    if (m === 'open') connectTo(c.id);
+    else if (m === 'edit') showConnForm({ ...c });
+    else if (m === 'copy') { const { id, hasPassword, ...rest } = c; const saved = await api.saveConnection({ ...rest, name: `${c.name} copy` }); renderWelcome(saved.id); toast('Duplicated without the password'); }
+    else showModal({
+      title: `Delete “${c.name}”?`, text: 'The saved connection and its Keychain password are removed. The database itself is not touched.',
+      actions: [{ label: 'Cancel' }, { label: 'Delete', cls: 'danger', primary: true, run: async () => { await api.deleteConnection(c.id); renderWelcome(); toast('Connection deleted'); } }],
+    });
+  }));
+}
+
+async function wireWelcome() {
+  const about = await api.about().catch(() => null);
+  if (about) {
+    $('#wlVersion').textContent = `Version ${about.version}${about.commit ? ` (${about.commit})` : ''}`;
+    $('#wlDev').textContent = `© ${about.year} ${(about.developer || '').split(':')[0]} · ${about.license} License`;
+  }
+  const open = () => { const c = W.list[W.on]; if (c) connectTo(c.id); };
+  $('#wlFilter').addEventListener('input', () => { W.on = 0; W.selId = null; renderWelcome(); });
+  $('#wlFilter').addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); W.on = Math.min(W.on + 1, W.list.length - 1); drawWelcome(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); W.on = Math.max(W.on - 1, 0); drawWelcome(); }
+    else if (e.key === 'Enter') { e.preventDefault(); open(); }
+  });
+  const list = $('#wlList');
+  list.addEventListener('click', e => {
+    const ed = e.target.closest('[data-edit]');
+    if (ed) { const c = W.list[+ed.dataset.edit]; if (c) showConnForm({ ...c }); return; }
+    const r = e.target.closest('.wl-row');
+    if (r) { W.on = +r.dataset.i; drawWelcome(); }
+  });
+  list.addEventListener('dblclick', e => { const r = e.target.closest('.wl-row'); if (r && !e.target.closest('[data-edit]')) { W.on = +r.dataset.i; open(); } });
+  list.addEventListener('contextmenu', e => { const r = e.target.closest('.wl-row'); if (r) { e.preventDefault(); welcomeMenu(e, +r.dataset.i); } });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-wl]');
+    if (!b) return;
+    if (b.dataset.wl === 'new') showConnForm(blankForm());
+    else if (b.dataset.wl === 'sqlite') openSqliteFile();
+  });
+  // Arrows and Enter work without clicking the search field first, and typing goes into it.
+  document.addEventListener('keydown', e => {
+    if (overlayOpen() || e.target.tagName === 'INPUT' || e.metaKey || e.ctrlKey) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') { e.preventDefault(); $('#wlFilter').focus(); $('#wlFilter').dispatchEvent(new KeyboardEvent('keydown', { key: e.key })); }
+    else if (e.key.length === 1) $('#wlFilter').focus();
+  });
+  await renderWelcome();
+  $('#wlFilter').focus();
+}
+
 /* ---------- boot ---------- */
 async function boot() {
   const info = await api.info().catch(() => ({ platform: 'web' }));
   if (info.platform === 'darwin') document.documentElement.classList.add('mac');
   if (info.platform === 'darwin' && info.vibrancy) document.documentElement.classList.add('vibrant');
   fillIcons();
+  if (WELCOME) {
+    api.onMenu(action => {
+      if (overlayOpen()) { if (action === 'run' && modalPrimary) modalPrimary(); return; }
+      if (action === 'new-connection') showConnForm(blankForm());
+      else if (action === 'open-file') openSqliteFile();
+      else if (action === 'connections' || action === 'palette') $('#wlFilter').focus();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlayOpen()) { e.preventDefault(); closeOverlay(); } });
+    await wireWelcome();
+    window.__trellis = { S, W, connectTo, renderWelcome, showConnForm, blankForm };
+    if (info.selftest) { const sc = document.createElement('script'); sc.src = 'selftest.js'; document.body.appendChild(sc); }
+    return;
+  }
   wireWorkspace();
   api.onMenu(onMenu);
   document.addEventListener('keydown', e => {

@@ -1,11 +1,14 @@
 # Trellis
 
-A database client for macOS in Dendro's liquid glass: SQLite, PostgreSQL and MySQL / MariaDB.
+A database client for macOS: SQLite, PostgreSQL and MySQL / MariaDB. Its look follows Dendro.
 Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScript.
 
 ## What it does
 
-- **Connections** — opened from the Open Connection sheet (`⌘⇧K`); each has a status color, a tag (local,
+- **Welcome window** — what Trellis opens with, as in TablePlus: the logo, version and developer on the left, saved
+  connections on the right (search, `↵` to open, right-click to edit, duplicate or delete). A connection opens in its
+  own workspace window; closing the last one brings the welcome window back (also Window → Welcome, `⌘⇧1`).
+- **Connections** — also opened from the Open Connection sheet (`⌘⇧K`) inside a workspace; each has a status color, a tag (local,
   development, staging, production), a safe mode (silent, ask before any write, read only) and an SSL mode
   (disable, prefer, require, verify-full). Passwords live in the macOS Keychain. The connection button in the toolbar
   switches databases; `⌘`-click opens one in a new window. A production window has a red rim.

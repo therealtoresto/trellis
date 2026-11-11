@@ -2,9 +2,22 @@
 //! when the title, size, focus or full screen state changes, so the window places them again after each.
 
 /// Left edge of the close button and the height of its center, in points from the window's top-left corner.
-/// The toolbar is 46 points tall and sits 10 points below the top, so its middle is 33 points down.
-pub const X: f64 = 28.0;
-pub const CENTER_Y: f64 = 33.0;
+pub struct Spec {
+    pub x: f64,
+    pub center_y: f64,
+    /// The welcome window keeps only the close button, like TablePlus.
+    pub only_close: bool,
+}
+
+pub fn spec(label: &str) -> Spec {
+    if label == "welcome" {
+        // Lines up with the search row of the connection list, 32 points down.
+        Spec { x: 22.0, center_y: 32.0, only_close: true }
+    } else {
+        // The workspace toolbar is 46 points tall and sits 10 points below the top: its middle is 33 points down.
+        Spec { x: 28.0, center_y: 33.0, only_close: false }
+    }
+}
 
 #[cfg(target_os = "macos")]
 mod mac {
@@ -16,7 +29,7 @@ mod mac {
         (ptr as *const NSWindow).as_ref()
     }
 
-    pub fn place(ptr: *mut c_void, x: f64, center_y: f64) {
+    pub fn place(ptr: *mut c_void, x: f64, center_y: f64, only_close: bool) {
         unsafe {
             let Some(w) = window(ptr) else { return };
             if w.styleMask().contains(NSWindowStyleMask::FullScreen) {
@@ -43,6 +56,7 @@ mod mac {
             bar.setFrame(b);
             let spacing = 20.0;
             for (i, button) in buttons.iter().enumerate() {
+                button.setHidden(only_close && i > 0);
                 // Window coordinates count from the bottom-left; the bar converts them to its own.
                 let center = NSPoint::new(x + size.width / 2.0 + i as f64 * spacing, win_h - center_y);
                 let p = bar.convertPoint_fromView(center, None::<&NSView>);
@@ -59,6 +73,7 @@ mod mac {
             [NSWindowButton::CloseButton, NSWindowButton::MiniaturizeButton, NSWindowButton::ZoomButton]
                 .into_iter()
                 .filter_map(|b| w.standardWindowButton(b))
+                .filter(|b| !b.isHidden())
                 .map(|b| {
                     let r = b.convertRect_toView(b.bounds(), None::<&NSView>);
                     (r.origin.x + r.size.width / 2.0, win_h - (r.origin.y + r.size.height / 2.0))
@@ -74,7 +89,8 @@ pub fn place(w: &tauri::WebviewWindow) {
     {
         let Ok(ptr) = w.ns_window() else { return };
         let ptr = ptr as usize;
-        let _ = w.run_on_main_thread(move || mac::place(ptr as *mut std::ffi::c_void, X, CENTER_Y));
+        let s = spec(w.label());
+        let _ = w.run_on_main_thread(move || mac::place(ptr as *mut std::ffi::c_void, s.x, s.center_y, s.only_close));
     }
     #[cfg(not(target_os = "macos"))]
     let _ = w;
