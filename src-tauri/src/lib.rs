@@ -234,7 +234,7 @@ fn about_info() -> Value {
     json!({
         "name": "Trellis",
         "version": env!("CARGO_PKG_VERSION"),
-        "commit": env!("TRELLIS_COMMIT"),
+        "build": env!("TRELLIS_BUILD"),
         "built": built,
         "developer": env!("CARGO_PKG_AUTHORS"),
         "license": env!("CARGO_PKG_LICENSE"),

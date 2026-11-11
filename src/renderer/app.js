@@ -1838,7 +1838,7 @@ function welcomeMenu(e, i) {
 async function wireWelcome() {
   const about = await api.about().catch(() => null);
   if (about) {
-    $('#wlVersion').textContent = `Version ${about.version}${about.commit ? ` (${about.commit})` : ''}`;
+    $('#wlVersion').textContent = `Version ${about.version}${about.build ? ` (${about.build})` : ''}`;
     $('#wlDev').textContent = `© ${about.year} ${(about.developer || '').split(':')[0]} · ${about.license} License`;
   }
   const open = () => { const c = W.list[W.on]; if (c) connectTo(c.id); };
