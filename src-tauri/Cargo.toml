@@ -1,6 +1,6 @@
 [package]
 name = "trellis"
-version = "0.4.0"
+version = "0.4.1"
 description = "A database client for SQLite, PostgreSQL and MySQL."
 edition = "2021"
 license = "MIT"
