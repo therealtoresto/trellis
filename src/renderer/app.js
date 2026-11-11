@@ -182,6 +182,7 @@ function showConnForm(form, fromList = false) {
   const ov = $('#overlay');
   ov.innerHTML = `<div class="scrim" data-scrim><div class="sheet form-sheet glass-strong" role="dialog" aria-modal="true" aria-label="${eng.label} connection">
     <h2 class="sheet-title">${eng.label} Connection</h2>
+    <div class="sheet-body">
     ${f.id ? '' : `<div class="seg engine-seg">${Object.entries(ENGINE).map(([k, e]) => `<button class="${f.engine === k ? 'on' : ''}" data-engine="${k}">${e.label}</button>`).join('')}</div>`}
     <div class="cf-box">
       <label class="cf-label" for="cf-name">Name</label><div class="cf-span">${input('name', { ph: server ? 'ENV_8' : 'Notes' })}</div>
@@ -206,6 +207,7 @@ function showConnForm(form, fromList = false) {
         <label class="cf-label" for="cf-file">File</label>
         <div class="cf-row">${input('file', { ph: '/path/to/database.sqlite', mono: true })}<button class="btn big" data-cf="choose">Choose…</button><button class="btn big" data-cf="newfile">New…</button></div>
         <span></span><p class="cf-note">The file is written after every commit and every write query.${f.demo ? ' This is the example database.' : ''}</p>`}
+    </div>
     </div>
     <div class="sheet-foot">
       ${f.id ? `<button class="btn danger big" data-cf="delete">${ic('trash')}Delete</button>` : ''}

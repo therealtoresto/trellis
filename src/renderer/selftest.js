@@ -36,7 +36,16 @@
     phase('');
     await step('welcome lists connections', async () => [...document.querySelectorAll('.wl-row .cc-name')].map(x => x.innerText.replace(/\s+/g, ' ')));
     await step('welcome shows the build', async () => [$('#wlVersion').textContent, $('#wlDev').textContent]);
-    await step('new connection form', async () => { $('.wl-action[data-wl="new"]').click(); await sleep(150); const t = $('.sheet-title').textContent; $('[data-cf="cancel"]').click(); return t; });
+    await step('new connection form', async () => {
+      $('.wl-action[data-wl="new"]').click(); await sleep(150);
+      const t = $('.sheet-title').textContent;
+      // In the short welcome window the buttons must stay on screen and the fields scroll.
+      const save = $('[data-cf="save"]').getBoundingClientRect(), body = $('.sheet-body');
+      const fits = save.bottom <= innerHeight && save.top >= 0;
+      const scrolls = body.scrollHeight <= body.clientHeight || (body.scrollTop = 999, body.scrollTop > 0);
+      $('[data-cf="cancel"]').click();
+      return { title: t, saveVisible: fits, fieldsScroll: scrolls };
+    });
     await lights('welcome', '.wl-bar');
     await trellis.selftestLog(`windows at launch: ${JSON.stringify(await trellis.debugWindows())}`);
     await T.connectTo('example');

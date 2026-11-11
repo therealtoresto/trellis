@@ -1319,3 +1319,8 @@ html.mac .start-bar { padding-left: 86px; }
 .icon-opt:hover { color: var(--fg); transform: translateY(-1px); }
 .icon-opt .conn-icon { width: 17px; height: 17px; }
 .icon-opt.on { color: #fff; background: linear-gradient(150deg, rgba(255,255,255,.32), rgba(255,255,255,0) 55%), var(--status); box-shadow: 0 0 0 2px color-mix(in srgb, var(--status) 45%, transparent); }
+
+/* Sheets fit short windows: the scrim keeps a small margin, and a form's middle scrolls under fixed buttons. */
+.scrim { padding: clamp(16px, 8vh, 96px) 16px 16px; }
+.sheet, .modal { max-height: 100%; }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 2px; }
