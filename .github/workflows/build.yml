@@ -56,6 +56,11 @@ jobs:
         with:
           fetch-depth: 0 # the build number is the commit count
 
+      # The runners list Azure's Ubuntu mirror first; when it stops resolving, apt crawls through every package on it.
+      # Going straight to archive.ubuntu.com avoids that.
+      - name: Skip the Azure apt mirror
+        run: sudo sed -i '/azure/d' /etc/apt/apt-mirrors.txt 2>/dev/null || true
+
       # WebKitGTK pulls in ~140 packages; they are cached between runs, so a slow or broken Ubuntu mirror only costs
       # the first run after the list changes, and the step gives up after 15 minutes instead of hanging.
       - name: System libraries
@@ -243,6 +248,7 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+      - run: sudo sed -i '/azure/d' /etc/apt/apt-mirrors.txt 2>/dev/null || true
       - run: |
           sleep 20 # releases/latest takes a moment to point at the new release
           bash scripts/install-linux.sh
