@@ -1,11 +1,11 @@
-# Builds Trellis for Ubuntu (.deb, .AppImage) and macOS (.app) on every push to main. Each build is its own version,
-# 0.2.<commit count> (scripts/version.sh); when both builds pass, the commit gets the tag v<version> and a GitHub
-# release with the files attached.
+# Builds Trellis for Ubuntu (.deb, .AppImage) and macOS (.app) when a release tag is pushed (npm run release), and
+# publishes the files as that GitHub release once both builds pass. Run it by hand from the Actions tab to get the
+# files as workflow artifacts without a release.
 name: Build
 
 on:
   push:
-    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -21,8 +21,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # the patch number is the commit count
+      # The version lives in tauri.conf.json; a release tag must name the same one.
       - id: v
-        run: echo "version=$(scripts/version.sh)" >> "$GITHUB_OUTPUT"
+        run: |
+          v=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$v" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $v in tauri.conf.json"; exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
 
   linux:
     name: Ubuntu
@@ -55,7 +61,7 @@ jobs:
       - run: npm ci
 
       - name: Build ${{ env.VERSION }}
-        run: ./node_modules/.bin/tauri build --bundles deb appimage --config "{\"version\":\"$VERSION\"}"
+        run: ./node_modules/.bin/tauri build --bundles deb appimage
 
       - name: Driver tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --release
@@ -67,7 +73,7 @@ jobs:
           TRELLIS_SELFTEST="$PWD/smoke" TRELLIS_SELFTEST_ONLY=grid TRELLIS_USERDATA="$(mktemp -d)" \
             timeout 180 xvfb-run -a src-tauri/target/release/trellis || true
           cat smoke/log.txt
-          grep -q "^welcome shows the build: \[\"Version $VERSION\"" smoke/log.txt
+          grep -q "^welcome shows the build: \[\"Version $VERSION " smoke/log.txt
           grep -q '^workspace opened on Example' smoke/log.txt
           grep -q '^large result: {"ok":true' smoke/log.txt
           grep -q '^done' smoke/log.txt
@@ -104,7 +110,7 @@ jobs:
       - run: npm ci
 
       - name: Build ${{ env.VERSION }}
-        run: ./node_modules/.bin/tauri build --bundles app --config "{\"version\":\"$VERSION\"}"
+        run: ./node_modules/.bin/tauri build --bundles app
 
       - name: Zip the app
         run: |
@@ -119,7 +125,7 @@ jobs:
   release:
     name: Tag and release
     needs: [version, linux, macos]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.version.outputs.version }}
@@ -131,9 +137,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}
+          tag_name: ${{ github.ref_name }}
           name: Trellis ${{ env.VERSION }}
-          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           make_latest: true
           files: |

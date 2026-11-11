@@ -233,7 +233,7 @@ fn about_info() -> Value {
     let built = env!("TRELLIS_BUILT");
     json!({
         "name": "Trellis",
-        "version": env!("TRELLIS_VERSION"),
+        "version": env!("CARGO_PKG_VERSION"),
         "build": env!("TRELLIS_BUILD"),
         "built": built,
         "developer": env!("CARGO_PKG_AUTHORS"),

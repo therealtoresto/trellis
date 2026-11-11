@@ -32,8 +32,7 @@ their passwords: type each password once.
 
 ## Install
 
-Download the latest version from [Releases](https://github.com/therealtoresto/trellis/releases/latest): every push to
-`main` that builds and passes its tests on Ubuntu and macOS becomes a release of its own.
+Download the latest version from [Releases](https://github.com/therealtoresto/trellis/releases/latest).
 
 **Ubuntu 22.04 or newer** (x86-64):
 
@@ -56,13 +55,20 @@ npm ci
 ./node_modules/.bin/tauri build --bundles deb appimage   # → src-tauri/target/release/bundle/{deb,appimage}
 ```
 
-### Versions and releases
+### Releasing
 
-A build's version is `major.minor` from `src-tauri/Cargo.toml` and the number of commits as the patch, so each commit
-is its own version: `0.2.17`, `0.2.18`… (`scripts/version.sh` prints it; the welcome window shows it). After both
-builds of a push to `main` pass, [the workflow](.github/workflows/build.yml) tags the commit `v<version>` and publishes
-a release with the `.deb`, the `.AppImage` and the zipped macOS app, its notes listing the commits since the last one.
-For a new minor version, change `version` in `src-tauri/Cargo.toml` (say to `0.3.0`); builds then count on as `0.3.N`.
+A release is cut by hand, not on every commit:
+
+```sh
+npm run release            # 0.2.0 → 0.2.1; or: npm run release minor | major | 0.4.0
+```
+
+It sets the version in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`, commits it, tags the
+commit `v<version>` and pushes both. The tag starts [the workflow](.github/workflows/build.yml): it builds Ubuntu and
+macOS, opens the Ubuntu build on a virtual screen as a smoke test, and when both pass publishes the release with the
+`.deb`, the `.AppImage` and the zipped macOS app, its notes listing the commits since the last one. The welcome window
+shows the version and the build number (the commit count), as in `Version 0.2.1 (18)`. To get the files without a
+release, run the Build workflow from the Actions tab: they appear under the run's Artifacts.
 
 ## Build and run
 
