@@ -5,6 +5,7 @@ pub mod common;
 pub mod mysql;
 pub mod postgres;
 pub mod sqlite;
+pub mod ssh;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -194,6 +195,26 @@ pub struct Config {
     pub ssl: Option<bool>,
     #[serde(default)]
     pub file: Option<String>,
+    /// Reach the server through an SSH tunnel.
+    #[serde(default)]
+    pub ssh: Option<bool>,
+    #[serde(default)]
+    pub ssh_host: Option<String>,
+    #[serde(default)]
+    pub ssh_port: Option<Value>,
+    #[serde(default)]
+    pub ssh_user: Option<String>,
+    /// auto (the SSH agent, then ~/.ssh keys), key (a key file) or password.
+    #[serde(default)]
+    pub ssh_auth: Option<String>,
+    #[serde(default)]
+    pub ssh_key: Option<String>,
+    /// The SSH password, or the key's passphrase.
+    #[serde(default)]
+    pub ssh_password: Option<String>,
+    /// Set while tunnelling: the local port that leads to the server.
+    #[serde(skip)]
+    pub via: Option<u16>,
 }
 
 impl Config {
@@ -269,6 +290,18 @@ impl Driver {
             "mysql" => Ok(Driver::Mysql(mysql::My::open(cfg).await?)),
             other => Err(format!("Unknown engine {other}")),
         }
+    }
+    /// Opens the driver, through an SSH tunnel when the connection asks for one; the tunnel lives as long as it is
+    /// kept. `known_hosts` is where Trellis remembers SSH servers.
+    pub async fn connect(cfg: &Config, known_hosts: std::path::PathBuf) -> R<(Driver, Option<ssh::Tunnel>)> {
+        if cfg.ssh != Some(true) || cfg.engine == "sqlite" {
+            return Ok((Driver::open(cfg).await?, None));
+        }
+        let tunnel = ssh::open(cfg, if cfg.engine == "mysql" { 3306 } else { 5432 }, known_hosts).await?;
+        let mut c = cfg.clone();
+        c.via = Some(tunnel.port);
+        let driver = Driver::open(&c).await.map_err(|e| format!("{e} (through SSH {})", Config::text(&cfg.ssh_host).unwrap_or("")))?;
+        Ok((driver, Some(tunnel)))
     }
     pub fn canceller(&self) -> Canceller {
         each!(self, d => d.canceller())

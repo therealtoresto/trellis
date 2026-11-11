@@ -1,0 +1,21 @@
+[
+  {
+    "demo": true,
+    "engine": "sqlite",
+    "env": "local",
+    "file": "Example/gamification_demo.sqlite",
+    "id": "example",
+    "name": "Example"
+  },
+  {
+    "database": "postgres",
+    "engine": "postgres",
+    "env": "local",
+    "hasPassword": false,
+    "host": "db.int8.smartico.ai",
+    "id": "d342b40f-4292-43be-8e59-40fb4c690401",
+    "name": "db.int8.smartico.ai",
+    "port": 5432,
+    "user": "js_taras"
+  }
+]

@@ -77,6 +77,7 @@ const isProd = () => S.conn && S.conn.env === 'production';
 const COLORS = ['#e8963c', '#2e9a55', '#7d8590', '#2f6fe4', '#b8893a', '#a3262a', '#8b5cf6'];
 const SAFE = { silent: 'Silent — run every query without asking', confirm: 'Ask before any write', readonly: 'Read only — block every write' };
 const SSL = { disable: 'Disable', prefer: 'Prefer', require: 'Require', 'verify-full': 'Verify full' };
+const SSH_AUTH = { auto: 'SSH agent or ~/.ssh keys', key: 'Key file', password: 'Password' };
 const safeOf = c => (c && c.safeMode) || (c && c.env === 'production' ? 'confirm' : 'silent');
 const sslOf = c => c.sslMode || (c.ssl ? 'require' : 'prefer');
 const safeMode = () => safeOf(S.conn);
@@ -88,7 +89,7 @@ function blankForm(engine = 'postgres') {
 
 function connSub(c) {
   if (c.engine === 'sqlite') return (c.file || '').split('/').pop() || 'no file chosen';
-  return `${c.host || 'localhost'} : ${c.database || (c.engine === 'postgres' ? 'postgres' : 'all schemas')}`;
+  return `${c.host || 'localhost'} : ${c.database || (c.engine === 'postgres' ? 'postgres' : 'all schemas')}${c.ssh && c.sshHost ? ` · via ${c.sshHost}` : ''}`;
 }
 
 // A connection's avatar: its icon (or its engine's) on a disc in its status color.
@@ -203,7 +204,19 @@ function showConnForm(form, fromList = false) {
         <label class="cf-label" for="cf-user">User</label><div class="cf-span">${input('user', { ph: eng.user })}</div>
         <label class="cf-label" for="cf-password">Password</label><div class="cf-span"><input class="cf-input" id="cf-password" data-k="password" type="password" value="${esc(f.password ?? '')}" placeholder="${f.hasPassword ? 'Stored in Keychain — type to replace' : 'None'}" autocomplete="off"></div>
         <label class="cf-label" for="cf-database">Database</label><div class="cf-span">${input('database', { ph: f.engine === 'mysql' ? 'Empty lists every schema' : 'postgres' })}</div>
-        <label class="cf-label" for="cf-sslMode">SSL mode</label><div class="cf-span">${select('sslMode', SSL)}</div>`
+        <label class="cf-label" for="cf-sslMode">SSL mode</label><div class="cf-span">${select('sslMode', SSL)}</div>
+    </div>
+    <div class="cf-box">
+        <span class="cf-label">SSH tunnel</span>
+        <div class="cf-span"><label class="cf-check"><input type="checkbox" id="cf-ssh" data-k="ssh"${f.ssh ? ' checked' : ''}>Connect through an SSH server</label></div>
+        ${f.ssh ? `
+        <label class="cf-label" for="cf-sshHost">SSH host</label>
+        <div class="cf-row">${input('sshHost', { ph: 'bastion.example.com' })}<label class="cf-label inline" for="cf-sshPort">Port</label><div class="cf-port">${input('sshPort', { ph: '22' })}</div></div>
+        <label class="cf-label" for="cf-sshUser">SSH user</label><div class="cf-span">${input('sshUser', { ph: 'Same as on this computer' })}</div>
+        <label class="cf-label" for="cf-sshAuth">Sign in with</label><div class="cf-span">${select('sshAuth', SSH_AUTH)}</div>
+        ${f.sshAuth === 'key' ? `<label class="cf-label" for="cf-sshKey">Key file</label><div class="cf-row">${input('sshKey', { ph: '~/.ssh/id_ed25519', mono: true })}<button class="btn big" data-cf="pickkey">Choose…</button></div>` : ''}
+        <label class="cf-label" for="cf-sshPassword">${f.sshAuth === 'password' ? 'SSH password' : 'Key passphrase'}</label><div class="cf-span"><input class="cf-input" id="cf-sshPassword" data-k="sshPassword" type="password" value="${esc(f.sshPassword ?? '')}" placeholder="${f.hasSshPassword ? 'Stored in Keychain — type to replace' : f.sshAuth === 'password' ? 'None' : 'Only for a key that has one'}" autocomplete="off"></div>
+        <span></span><p class="cf-note">Host and port above name the database as the SSH server sees it, often 127.0.0.1. New SSH servers are trusted on first connect and checked from then on, as with <code>ssh</code>.</p>` : ''}`
       : `
         <label class="cf-label" for="cf-file">File</label>
         <div class="cf-row">${input('file', { ph: '/path/to/database.sqlite', mono: true })}<button class="btn big" data-cf="choose">Choose…</button><button class="btn big" data-cf="newfile">New…</button></div>
@@ -223,15 +236,26 @@ function showConnForm(form, fromList = false) {
   const sheet = $('.sheet', ov);
   sheet.addEventListener('input', e => {
     const k = e.target.dataset.k;
-    if (k) f[k] = e.target.value;
+    if (k && e.target.type !== 'checkbox') f[k] = e.target.value;
   });
-  sheet.addEventListener('change', e => { const k = e.target.dataset.k; if (k) f[k] = e.target.value; });
+  sheet.addEventListener('change', e => {
+    const k = e.target.dataset.k;
+    if (!k) return;
+    f[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    // Turning the tunnel on, or changing how it signs in, changes the fields below.
+    if (k === 'ssh' || k === 'sshAuth') { if (k === 'ssh' && f.ssh && !f.sshAuth) f.sshAuth = 'auto'; showConnForm(f, fromList); const el = $(`#cf-${k === 'ssh' && f.ssh ? 'sshHost' : k}`); if (el) el.focus(); }
+  });
   sheet.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); run('connect'); } });
   const run = async act => {
     if (S.busy) return;
     try {
       if (act === 'cancel') return closeOverlay();
       if (act === 'back') return showOpenConnection(f.id);
+      if (act === 'pickkey') {
+        const key = await api.pickKey();
+        if (key) { f.sshKey = key; showConnForm(f, fromList); }
+        return;
+      }
       if (act === 'choose' || act === 'newfile') {
         const file = act === 'choose' ? await api.openFile() : await api.newFile();
         if (!file) return;
@@ -246,7 +270,7 @@ function showConnForm(form, fromList = false) {
           actions: [{ label: 'Cancel', run: () => { back(); return false; } }, { label: 'Delete', cls: 'danger', primary: true, run: async () => { await api.deleteConnection(f.id); toast('Connection deleted'); if (WELCOME) { closeOverlay(); renderWelcome(); } else showOpenConnection(); return false; } }],
         });
       }
-      const problem = f.engine === 'sqlite' ? (!f.file && 'Choose a SQLite file first.') : (!f.host && 'Enter a host.');
+      const problem = f.engine === 'sqlite' ? (!f.file && 'Choose a SQLite file first.') : !f.host ? 'Enter a host.' : f.ssh && !f.sshHost ? 'Enter the SSH host.' : f.ssh && f.sshAuth === 'key' && !f.sshKey ? 'Choose the SSH key file.' : '';
       if (problem) return sheetStatus('bad', problem);
       if (act === 'test') {
         sheetStatus('', 'Testing…');
@@ -287,7 +311,7 @@ function showConnForm(form, fromList = false) {
 async function saveForm() {
   const f = { ...S.form };
   if (!f.name) f.name = f.engine === 'sqlite' ? (f.file || '').split('/').pop() || 'SQLite' : `${f.database || f.host}`;
-  if (f.engine === 'sqlite') { delete f.host; delete f.port; delete f.user; delete f.database; delete f.sslMode; delete f.password; }
+  if (f.engine === 'sqlite') { for (const k of ['host', 'port', 'user', 'database', 'sslMode', 'password', 'ssh', 'sshHost', 'sshPort', 'sshUser', 'sshAuth', 'sshKey', 'sshPassword']) delete f[k]; }
   else { delete f.file; f.demo = false; }
   delete f.ssl;
   const saved = await api.saveConnection(f);

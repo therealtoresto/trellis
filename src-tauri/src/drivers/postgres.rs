@@ -57,6 +57,11 @@ impl Pg {
         let mut c = tokio_postgres::Config::new();
         c.host(Config::text(&cfg.host).unwrap_or("localhost"));
         c.port(cfg.port(5432));
+        // Through a tunnel the socket goes to the local port; the host name stays for TLS.
+        if let Some(p) = cfg.via {
+            c.hostaddr(std::net::IpAddr::from([127, 0, 0, 1]));
+            c.port(p);
+        }
         if let Some(u) = Config::text(&cfg.user) { c.user(u); }
         if let Some(p) = cfg.password.as_deref().filter(|p| !p.is_empty()) { c.password(p); }
         // Without a database Postgres would look for one named after the user; `postgres` always exists.

@@ -25,6 +25,7 @@
     apply: changes => call('db_apply', { changes }),
     resetDemo: () => call('demo_reset'),
     openFile: () => call('dialog_open_sqlite'),
+    pickKey: () => call('dialog_pick_key'),
     newFile: () => call('dialog_new_sqlite'),
     openSql: () => call('file_open_sql'),
     readSql: path => call('file_read_sql', { path }),

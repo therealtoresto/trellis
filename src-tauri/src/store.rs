@@ -25,6 +25,11 @@ impl Store {
         self.dir.join("connections.json")
     }
 
+    /// SSH servers Trellis has met, besides ~/.ssh/known_hosts.
+    pub fn known_hosts(&self) -> PathBuf {
+        self.dir.join("known_hosts")
+    }
+
     pub fn demo_file(&self) -> PathBuf {
         self.dir.join("Example").join("gamification_demo.sqlite")
     }
@@ -96,7 +101,9 @@ impl Store {
         let mut list = self.list()?;
         let mut form = match form { Value::Object(m) => m, _ => return Err("Bad connection form.".into()) };
         let password = form.remove("password");
+        let ssh_password = form.remove("sshPassword");
         form.remove("hasPassword");
+        form.remove("hasSshPassword");
         let id = form.get("id").and_then(Value::as_str).filter(|s| !s.is_empty()).map(String::from).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         form.insert("id".into(), json!(id));
         let pos = list.iter().position(|c| c["id"] == id.as_str());
@@ -114,6 +121,16 @@ impl Store {
                 next.insert("hasPassword".into(), json!(true));
             }
         }
+        if let Some(Value::String(p)) = ssh_password {
+            let entry = keychain(&format!("{id}:ssh"))?;
+            if p.is_empty() {
+                let _ = entry.delete_credential();
+                next.insert("hasSshPassword".into(), json!(false));
+            } else {
+                entry.set_password(&p).map_err(|e| format!("Could not store the SSH password in Keychain: {e}"))?;
+                next.insert("hasSshPassword".into(), json!(true));
+            }
+        }
         let next = Value::Object(next);
         match pos {
             Some(i) => list[i] = next.clone(),
@@ -128,6 +145,9 @@ impl Store {
         if let Ok(e) = keychain(id) {
             let _ = e.delete_credential();
         }
+        if let Ok(e) = keychain(&format!("{id}:ssh")) {
+            let _ = e.delete_credential();
+        }
         self.write(&list)
     }
 
@@ -137,6 +157,11 @@ impl Store {
         if cfg.password.is_none() && conn.get("hasPassword") == Some(&json!(true)) {
             if let Some(id) = conn.get("id").and_then(Value::as_str) {
                 cfg.password = keychain(id)?.get_password().ok();
+            }
+        }
+        if cfg.ssh_password.is_none() && conn.get("hasSshPassword") == Some(&json!(true)) {
+            if let Some(id) = conn.get("id").and_then(Value::as_str) {
+                cfg.ssh_password = keychain(&format!("{id}:ssh"))?.get_password().ok();
             }
         }
         Ok(cfg)

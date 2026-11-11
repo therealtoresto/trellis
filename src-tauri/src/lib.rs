@@ -22,6 +22,8 @@ use tokio::sync::Mutex;
 
 struct Session {
     driver: Driver,
+    /// The SSH tunnel the driver talks through, kept open as long as the session.
+    _tunnel: Option<drivers::ssh::Tunnel>,
 }
 
 struct AppState {
@@ -64,7 +66,7 @@ async fn conns_test(state: State<'_, AppState>, form: Value) -> R<drivers::Info>
     for (k, v) in form.as_object().cloned().unwrap_or_default() {
         merged[k] = v;
     }
-    let mut d = Driver::open(&state.store.config(&merged)?).await?;
+    let (mut d, _tunnel) = Driver::connect(&state.store.config(&merged)?, state.store.known_hosts()).await?;
     d.info().await
 }
 
@@ -74,10 +76,10 @@ async fn db_connect(window: Window, state: State<'_, AppState>, id: String) -> R
     if conn.get("demo") == Some(&json!(true)) && !state.store.demo_file().exists() {
         state.store.reset_demo()?;
     }
-    let mut driver = Driver::open(&state.store.config(&conn)?).await?;
+    let (mut driver, tunnel) = Driver::connect(&state.store.config(&conn)?, state.store.known_hosts()).await?;
     let info = driver.info().await?;
     state.cancels.lock().unwrap().insert(window.label().to_string(), driver.canceller());
-    state.sessions.lock().await.insert(window.label().to_string(), Arc::new(Mutex::new(Session { driver })));
+    state.sessions.lock().await.insert(window.label().to_string(), Arc::new(Mutex::new(Session { driver, _tunnel: tunnel })));
     let name = conn.get("name").and_then(Value::as_str).unwrap_or("Trellis");
     let _ = window.set_title(&format!("{name} — Trellis"));
     replace_lights(&window);
@@ -157,6 +159,16 @@ fn query_dir(app: &AppHandle) -> PathBuf {
 
 fn path_of(p: tauri_plugin_dialog::FilePath) -> R<String> {
     p.into_path().map(|p| p.to_string_lossy().into_owned()).map_err(err)
+}
+
+/// Picks an SSH private key, starting in ~/.ssh.
+#[tauri::command]
+async fn dialog_pick_key(app: AppHandle) -> R<Option<String>> {
+    let dir = PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".ssh");
+    match app.dialog().file().set_title("Choose an SSH key").set_directory(dir).blocking_pick_file() {
+        Some(p) => Ok(Some(path_of(p)?)),
+        None => Ok(None),
+    }
 }
 
 #[tauri::command]
@@ -623,7 +635,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             conns_list, conns_save, conns_delete, conns_test,
             db_connect, db_disconnect, db_objects, db_set_schema, db_all_columns, db_structure, db_page, db_query, db_cancel, db_preview, db_apply,
-            demo_reset, dialog_open_sqlite, dialog_new_sqlite, file_open_sql, file_read_sql, file_save_sql, file_reveal, file_export_path, file_write_export,
+            demo_reset, dialog_pick_key, dialog_open_sqlite, dialog_new_sqlite, file_open_sql, file_read_sql, file_save_sql, file_reveal, file_export_path, file_write_export,
             clipboard_write, window_new, app_info, selftest_log, selftest_done, debug_traffic_lights, selftest_resize, about_info, open_connection_window, show_welcome, debug_windows, place_lights,
             update_check, update_install,
         ])

@@ -10,7 +10,10 @@ Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScr
   own workspace window; closing the last one brings the welcome window back (also Window → Welcome, `⌘⇧1`).
 - **Connections** — also opened from the Open Connection sheet (`⌘⇧K`) inside a workspace; each has a status color, a tag (local,
   development, staging, production), a safe mode (silent, ask before any write, read only) and an SSL mode
-  (disable, prefer, require, verify-full). Passwords live in the macOS Keychain or, on Linux, the Secret Service
+  (disable, prefer, require, verify-full). A server connection can go through an **SSH tunnel**, signing in with the
+  SSH agent or `~/.ssh` keys, a key file (with its passphrase) or a password; the database host and port are then as
+  the SSH server sees them. SSH servers are trusted on first connect and checked against `~/.ssh/known_hosts` and
+  Trellis' own list from then on. Passwords live in the macOS Keychain or, on Linux, the Secret Service
   (GNOME Keyring, KWallet). The connection button in the toolbar
   switches databases; `⌘`-click opens one in a new window. A production window has a red rim.
 - **Schemas** — the sidebar shows one schema at a time; switch at its foot or with `⌘⇧P`. On Postgres the switch also

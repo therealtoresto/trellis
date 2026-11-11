@@ -71,8 +71,8 @@ impl My {
     pub async fn open(cfg: &Config) -> R<Self> {
         let database = Config::text(&cfg.database).map(String::from);
         let base = OptsBuilder::default()
-            .ip_or_hostname(Config::text(&cfg.host).unwrap_or("localhost"))
-            .tcp_port(cfg.port(3306))
+            .ip_or_hostname(if cfg.via.is_some() { "127.0.0.1" } else { Config::text(&cfg.host).unwrap_or("localhost") })
+            .tcp_port(cfg.via.unwrap_or_else(|| cfg.port(3306)))
             .user(Config::text(&cfg.user))
             .pass(cfg.password.as_deref().filter(|p| !p.is_empty()))
             .db_name(database.clone())

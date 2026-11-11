@@ -59,6 +59,15 @@
     };
     await step('new connection form', async () => { $('.wl-action[data-wl="new"]').click(); return formFits(); });
     await step('sqlite connection form', async () => { const i = T.W.list.findIndex(c => c.engine === 'sqlite'); $$('.wl-row [data-edit]')[i].click(); return formFits(); });
+    await step('ssh tunnel fields', async () => {
+      $('.wl-action[data-wl="new"]').click(); await sleep(150);
+      const box = $('#cf-ssh'); box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(100);
+      const fields = ['sshHost', 'sshPort', 'sshUser', 'sshAuth', 'sshPassword'].filter(k => $(`#cf-${k}`));
+      const auth = $('#cf-sshAuth'); auth.value = 'key'; auth.dispatchEvent(new Event('change', { bubbles: true })); await sleep(100);
+      const key = !!$('#cf-sshKey') && !!$('[data-cf="pickkey"]');
+      const fits = await formFits();
+      return { fields, key, ...fits, ok: fields.length === 5 && key && fits.ok };
+    });
     await lights('welcome', '.wl-bar');
     await trellis.selftestLog(`windows at launch: ${JSON.stringify(await trellis.debugWindows())}`);
     await step('double click opens a connection', async () => {

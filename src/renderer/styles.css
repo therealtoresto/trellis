@@ -1292,6 +1292,9 @@ html.mac .start-bar { padding-left: 86px; }
 .swatch:hover { transform: translateY(-1px); }
 .swatch.on { box-shadow: 0 0 0 2px var(--bg-solid, #1d1e22), 0 0 0 3.5px var(--sw); }
 .cf-box .cf-note { margin: 0; }
+.cf-check { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; }
+.cf-check input { margin: 0; accent-color: var(--accent); }
+.cf-note code { font: 11.5px var(--mono); }
 .form-sheet .sheet-foot .btn.big { padding: 0 13px; }
 
 /* Sheets and dialogs sit on a nearly solid pane so the grid behind never reads through. */
