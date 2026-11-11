@@ -68,7 +68,9 @@ sudo apt update && sudo apt install trellis
 Or download a file from the release: `sudo apt install ./Trellis_*_amd64.deb`, or the AppImage, which runs without
 installing (`chmod +x Trellis_*.AppImage && ./Trellis_*.AppImage`). Passwords go to the Secret Service (GNOME Keyring,
 or KWallet on KDE). Closing the last window quits Trellis on Linux. Trellis turns off WebKit's DMA-BUF renderer, which
-leaves the window white with some GPUs and drivers; `WEBKIT_DISABLE_DMABUF_RENDERER=0 trellis` tries it anyway.
+leaves the window white with some GPUs and drivers; `WEBKIT_DISABLE_DMABUF_RENDERER=0 trellis` tries it anyway. If a
+window still stays blank, `TRELLIS_DEVTOOLS=1 trellis` opens the Web Inspector beside it (on any system) to show
+whether the page loaded and what failed.
 
 **macOS** (Apple silicon, macOS 11 or newer) with Homebrew:
 

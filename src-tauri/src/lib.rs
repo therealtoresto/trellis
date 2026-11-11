@@ -397,7 +397,8 @@ fn create_welcome(app: &AppHandle) -> R<()> {
         .resizable(false)
         .maximizable(false)
         .center()
-        .disable_drag_drop_handler();
+        .disable_drag_drop_handler()
+        .devtools(cfg!(debug_assertions) || devtools());
     #[cfg(target_os = "macos")]
     {
         b = b
@@ -407,6 +408,9 @@ fn create_welcome(app: &AppHandle) -> R<()> {
             .effects(WindowEffectsConfig { effects: vec![Effect::UnderWindowBackground], state: Some(EffectState::FollowsWindowActiveState), radius: None, color: None, interactive: false });
     }
     let w = b.build().map_err(err)?;
+    if devtools() {
+        w.open_devtools();
+    }
     lights::place_settled(&w);
     Ok(())
 }
@@ -455,6 +459,11 @@ fn selftest_done(app: AppHandle) {
 
 /* ---------- windows and menu ---------- */
 
+/// TRELLIS_DEVTOOLS=1 opens the Web Inspector beside every window, to see why a page does not draw.
+fn devtools() -> bool {
+    std::env::var("TRELLIS_DEVTOOLS").is_ok_and(|v| v != "0")
+}
+
 fn create_window(app: &AppHandle, connect: Option<String>) -> R<WebviewWindow> {
     let n = WINDOWS.fetch_add(1, Ordering::SeqCst);
     let label = format!("trellis-{n}");
@@ -464,7 +473,8 @@ fn create_window(app: &AppHandle, connect: Option<String>) -> R<WebviewWindow> {
         .inner_size(1440.0, 900.0)
         .min_inner_size(780.0, 520.0)
         .initialization_script(&init)
-        .disable_drag_drop_handler();
+        .disable_drag_drop_handler()
+        .devtools(cfg!(debug_assertions) || devtools());
     #[cfg(target_os = "macos")]
     {
         b = b
@@ -477,6 +487,9 @@ fn create_window(app: &AppHandle, connect: Option<String>) -> R<WebviewWindow> {
         b = b.position(120.0 + (n % 6) as f64 * 28.0, 80.0 + (n % 6) as f64 * 28.0);
     }
     let w = b.build().map_err(err)?;
+    if devtools() {
+        w.open_devtools();
+    }
     lights::place_settled(&w);
     Ok(w)
 }
