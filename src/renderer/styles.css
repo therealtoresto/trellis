@@ -729,6 +729,7 @@ kbd {
   user-select: none;
   border-right: 1px solid var(--line);
 }
+.q-editor .stmt-band { position: absolute; left: 40px; right: 0; background: color-mix(in srgb, var(--accent) 7%, transparent); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 55%, transparent); pointer-events: none; }
 .q-editor .hl { left: 40px; right: 0; padding-left: 12px; padding-right: 12px; overflow: hidden; pointer-events: none; color: var(--fg); }
 .q-editor textarea {
   left: 40px; right: 0; width: calc(100% - 40px);

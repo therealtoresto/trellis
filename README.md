@@ -22,9 +22,10 @@ Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScr
   `⌘S` shows the SQL and commits it in one transaction; if a statement fails nothing is applied. Rows are matched by
   primary key (SQLite tables without one use `rowid`); tables without a key are read only.
 - **Structure** — columns, indexes, foreign keys and the definition (`⌘2`).
-- **SQL** — highlighting, autocomplete (`table.` lists its columns, `schema.` its tables), `⌘↵` runs the query or the
-  selection, results copy as CSV. `⌘S` saves the tab to a `.sql` file (`~/Documents/Trellis Queries` by default),
-  `⌘O` opens one.
+- **SQL** — highlighting, autocomplete (`table.` lists its columns, `schema.` its tables). `⌘↵` runs the selection or
+  the statement at the caret (a faint band marks it when the editor holds several), `⌘⇧↵` runs them all, `⌘.` stops a
+  running query on any engine. A result keeps its first 50,000 rows. Results copy as CSV. `⌘S` saves the tab to a
+  `.sql` file (`~/Documents/Trellis Queries` by default), `⌘O` opens one.
 - **Sidebar panes** — Items, saved Queries and the History of every query and commit, per connection.
 - **Inspector** — every field of the selected row; edit, set NULL, copy as JSON or INSERT (`⌘I`).
 - **JSON and arrays** — JSON values (`json`, `jsonb`, or JSON kept in a text column) are coloured in the grid and

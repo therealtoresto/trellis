@@ -1215,6 +1215,7 @@ function renderQueryTab(tab) {
   body.innerHTML = `
     <div class="q-editor" style="height:${tab.editorH}px">
       <div class="gutter" aria-hidden="true"></div>
+      <div class="stmt-band" aria-hidden="true" hidden></div>
       <pre class="hl" aria-hidden="true"></pre>
       <textarea class="sql-input" spellcheck="false" wrap="off" autocomplete="off" autocapitalize="off" aria-label="SQL query"></textarea>
       <div class="ac glass-strong" hidden></div>
@@ -1238,11 +1239,11 @@ function renderQueryTab(tab) {
 function renderRunButton(tab) {
   const b = $('#runBtn');
   if (!b || cur() !== tab) return;
-  const ta = $('#tabBody textarea.sql-input');
-  const selection = ta && ta.selectionStart !== ta.selectionEnd;
   b.disabled = !!tab.cancelled;
-  b.title = tab.running ? 'Stop the query' : '';
-  b.innerHTML = tab.running ? `<span class="spin"></span>${tab.cancelled ? 'Stopping…' : 'Stop'}<kbd>${MOD}.</kbd>` : `${ic('play')}<span id="runLbl">${selection ? 'Run selection' : 'Run'}</span><kbd>${MOD}↵</kbd>`;
+  const what = tab.running ? '' : runTarget(tab, false).what;
+  b.innerHTML = tab.running ? `<span class="spin"></span>${tab.cancelled ? 'Stopping…' : 'Stop'}<kbd>${MOD}.</kbd>` : `${ic('play')}<span id="runLbl">${what === 'selection' ? 'Run selection' : what === 'statement' ? 'Run statement' : 'Run'}</span><kbd>${MOD}↵</kbd>`;
+  b.title = tab.running ? 'Stop the query' : what === 'statement' ? `Runs the statement at the caret; ${MOD}⇧↵ runs them all` : '';
+  syncStatementBand();
 }
 
 function syncEditor() {
@@ -1262,6 +1263,7 @@ function syncScroll() {
   $('.hl', ed).scrollTop = ta.scrollTop;
   $('.hl', ed).scrollLeft = ta.scrollLeft;
   $('.gutter', ed).scrollTop = ta.scrollTop;
+  syncStatementBand();
 }
 
 function renderQueryResult(tab) {
@@ -1270,7 +1272,7 @@ function renderQueryResult(tab) {
   tab.model = gridModel(tab);
   wrap._win = null;
   if (tab.error) wrap.innerHTML = `<div class="q-error"><strong>Query failed</strong><code>${esc(tab.error)}</code></div>`;
-  else if (!tab.result) wrap.innerHTML = `<div class="grid-empty">${tab.msg ? 'The statement ran and returned no rows.' : `Write a query and press <kbd>${MOD}</kbd> <kbd>↵</kbd> to run it. Select part of it to run only that part.`}</div>`;
+  else if (!tab.result) wrap.innerHTML = `<div class="grid-empty">${tab.msg ? 'The statement ran and returned no rows.' : `Write a query and press <kbd>${MOD}</kbd> <kbd>↵</kbd> to run the statement at the caret, or the selection; <kbd>${MOD}</kbd> <kbd>⇧</kbd> <kbd>↵</kbd> runs them all.`}</div>`;
   else fillGrid(wrap, tab, tab.model);
   if (msg) msg.innerHTML = tab.msg || '';
 }
@@ -1537,6 +1539,8 @@ function wireEditor(tab, ta) {
     syncEditor();
   };
   const updateRun = () => renderRunButton(tab);
+  ta.addEventListener('focus', updateRun);
+  ta.addEventListener('blur', () => setTimeout(syncStatementBand, 0));
   ta.addEventListener('input', e => {
     tab.sql = ta.value;
     syncEditor();
@@ -1558,7 +1562,7 @@ function wireEditor(tab, ta) {
       if ((e.key === 'Enter' && !mod) || e.key === 'Tab') { e.preventDefault(); accept(on); return; }
       if (e.key === 'Escape') { e.preventDefault(); hideAc(); return; }
     }
-    if (mod && e.key === 'Enter') { e.preventDefault(); runActive(); return; }
+    if (mod && e.key === 'Enter') { e.preventDefault(); runActive(e.shiftKey); return; }
     if (mod && e.key === '.') { e.preventDefault(); const t = cur(); if (t) stopQuery(t); return; }
     if (e.key === 'Tab' && !mod) {
       e.preventDefault();
@@ -1569,14 +1573,83 @@ function wireEditor(tab, ta) {
   });
 }
 
-function runActive() {
+/* The statements of a script as [start, end) ranges, split at semicolons outside strings, quoted names, comments and
+   Postgres dollar quotes; each range starts at its first word and ends after its semicolon. Comment-only pieces are
+   left out. */
+function statementRanges(sql) {
+  const out = [], n = sql.length, backslash = S.info && S.info.engine === 'MySQL';
+  let start = 0, i = 0, code = false;
+  const close = end => {
+    if (code) {
+      let a = start;
+      // Skip the whitespace and comments before the first word.
+      for (;;) {
+        while (a < end && /\s/.test(sql[a])) a++;
+        if (sql.startsWith('--', a)) { const nl = sql.indexOf('\n', a); a = nl < 0 || nl > end ? end : nl + 1; }
+        else if (sql.startsWith('/*', a)) { const e = sql.indexOf('*/', a + 2); a = e < 0 || e > end ? end : e + 2; }
+        else break;
+      }
+      if (a < end) out.push([a, end]);
+    }
+    start = end; code = false;
+  };
+  while (i < n) {
+    const c = sql[i];
+    if (c === '-' && sql[i + 1] === '-') { const nl = sql.indexOf('\n', i); i = nl < 0 ? n : nl; continue; }
+    if (c === '/' && sql[i + 1] === '*') { const e = sql.indexOf('*/', i + 2); i = e < 0 ? n : e + 2; continue; }
+    if (c === ';') { i++; close(i); continue; }
+    if (!/\s/.test(c)) code = true;
+    if (c === "'" || c === '"' || c === '`') {
+      for (i++; i < n && sql[i] !== c; i++) if (backslash && sql[i] === '\\' && c === "'") i++;
+      i++;
+      continue;
+    }
+    const dollar = c === '$' && !/[\w$]/.test(sql[i - 1] || '') && sql.slice(i).match(/^\$[A-Za-z_]*\$/);
+    if (dollar) { const e = sql.indexOf(dollar[0], i + dollar[0].length); i = e < 0 ? n : e + dollar[0].length; continue; }
+    i++;
+  }
+  close(n);
+  return out;
+}
+
+// The statement the caret is in, or just after; null when the script holds only one, which then runs whole.
+function statementAt(sql, pos) {
+  const r = statementRanges(sql);
+  if (r.length < 2) return null;
+  return r.find(([a, b]) => pos >= a && pos <= b) || [...r].reverse().find(([, b]) => b <= pos) || r[0];
+}
+
+// What ⌘↵ runs: the selection, else the statement at the caret; `all` (⌘⇧↵) runs the whole editor.
+function runTarget(tab, all) {
+  const ta = $('#tabBody textarea.sql-input');
+  if (!ta || all) return { text: tab.sql, what: 'all' };
+  if (ta.selectionStart !== ta.selectionEnd) return { text: ta.value.slice(ta.selectionStart, ta.selectionEnd), what: 'selection' };
+  const st = statementAt(ta.value, ta.selectionStart);
+  return st ? { text: ta.value.slice(st[0], st[1]), what: 'statement', range: st } : { text: tab.sql, what: 'all' };
+}
+
+function runActive(all = false) {
   const tab = cur();
   if (!tab || tab.kind !== 'query') return;
   if (tab.running) return stopQuery(tab);
-  const ta = $('#tabBody textarea.sql-input');
-  const text = ta && ta.selectionStart !== ta.selectionEnd ? ta.value.slice(ta.selectionStart, ta.selectionEnd) : tab.sql;
+  const { text } = runTarget(tab, all);
   if (!text.trim()) { toast('Write a query first', true); return; }
   execQuery(tab, text);
+}
+
+// A faint band behind the statement ⌘↵ would run, when the editor holds more than one.
+function syncStatementBand() {
+  const ed = $('#tabBody .q-editor');
+  const tab = cur();
+  if (!ed || !tab || tab.kind !== 'query') return;
+  const band = $('.stmt-band', ed), ta = $('textarea', ed);
+  const t = document.activeElement === ta ? runTarget(tab, false) : null;
+  if (!t || t.what !== 'statement') { band.hidden = true; return; }
+  const first = ta.value.slice(0, t.range[0]).split('\n').length - 1;
+  const lines = ta.value.slice(t.range[0], t.range[1]).split('\n').length;
+  band.style.top = `${10 + first * 20 - ta.scrollTop}px`;
+  band.style.height = `${lines * 20}px`;
+  band.hidden = false;
 }
 
 // Asks the server to stop the running statement; the query then ends as "Stopped".
@@ -2014,6 +2087,8 @@ function onMenu(action) {
     case 'palette': return showPalette();
     case 'schemas': return showPalette(true);
     case 'run': return runActive();
+    case 'run-all': return runActive(true);
+    case 'stop': return tab && stopQuery(tab);
     case 'commit': return reviewChanges();
     case 'discard': return discard();
     case 'add-row': return addRow();

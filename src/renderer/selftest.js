@@ -143,6 +143,21 @@
       r.ok = /Stop/.test(button) && !r.running && r.msg === 'Stopped' && !r.error && /Run/.test(r.after);
       return r;
     });
+    await step('run the statement at the caret', async () => {
+      T.newQueryTab('SELECT 1 AS first;\n\nSELECT 2 AS second;');
+      await sleep(100);
+      const ta = $('#tabBody textarea.sql-input');
+      const run = async (pos, all) => {
+        ta.focus(); ta.setSelectionRange(pos, pos); ta.dispatchEvent(new KeyboardEvent('keyup'));
+        const label = $('#runLbl').textContent, band = !$('.stmt-band').hidden;
+        T.cur().result = null; T.runActive(all);
+        for (let i = 0; i < 50 && !T.cur().result; i++) await sleep(50);
+        return { label, band, col: T.cur().result && T.cur().result.columns[0] };
+      };
+      const r = { line1: await run(3), line3: await run(22), all: await run(3, true) };
+      r.ok = r.line1.col === 'first' && r.line3.col === 'second' && r.line1.label === 'Run statement' && r.line1.band && r.all.col === 'second';
+      return r;
+    });
     await step('huge result is capped', async () => {
       T.newQueryTab('WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 60000) SELECT i FROM n');
       T.runActive();
