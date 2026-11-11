@@ -11,8 +11,8 @@ pub struct Spec {
 
 pub fn spec(label: &str) -> Spec {
     if label == "welcome" {
-        // Lines up with the search row of the connection list, 32 points down.
-        Spec { x: 22.0, center_y: 32.0, only_close: true }
+        // Lines up with the search row of the connection list, 32 points down, and sits as far in from the left.
+        Spec { x: 25.0, center_y: 32.0, only_close: true }
     } else {
         // The workspace toolbar is 46 points tall and sits 10 points below the top: its middle is 33 points down.
         Spec { x: 28.0, center_y: 33.0, only_close: false }

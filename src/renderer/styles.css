@@ -1276,16 +1276,6 @@ html.mac .start-bar { padding-left: 86px; }
 
 .wl-main { display: flex; flex-direction: column; min-width: 0; }
 .wl-bar { display: flex; align-items: center; gap: 10px; height: 40px; margin: 12px 14px 8px; }
-.wl-tools {
-  display: flex; align-items: center; gap: 2px;
-  height: 36px; padding: 0 4px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--glass-edge-soft);
-  background: var(--glass-sheen), color-mix(in srgb, var(--fg) 5%, transparent);
-  box-shadow: inset 0 1px 0 var(--glass-edge);
-}
-.wl-tools .icon-btn { width: 30px; height: 30px; border-radius: 50%; }
-.wl-tools .icon-btn .icon { width: 17px; height: 17px; }
 .wl-search { flex: 1; height: 36px; }
 .wl-search input { font-size: 13.5px; }
 .wl-list { flex: 1; overflow-y: auto; padding: 4px 10px 8px; }
