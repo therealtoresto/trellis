@@ -10,7 +10,8 @@ Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScr
   own workspace window; closing the last one brings the welcome window back (also Window → Welcome, `⌘⇧1`).
 - **Connections** — also opened from the Open Connection sheet (`⌘⇧K`) inside a workspace; each has a status color, a tag (local,
   development, staging, production), a safe mode (silent, ask before any write, read only) and an SSL mode
-  (disable, prefer, require, verify-full). Passwords live in the macOS Keychain. The connection button in the toolbar
+  (disable, prefer, require, verify-full). Passwords live in the macOS Keychain or, on Linux, the Secret Service
+  (GNOME Keyring, KWallet). The connection button in the toolbar
   switches databases; `⌘`-click opens one in a new window. A production window has a red rim.
 - **Schemas** — the sidebar shows one schema at a time; switch at its foot or with `⌘⇧P`. On Postgres the switch also
   sets `search_path`, so bare table names work in the SQL editor.
@@ -26,6 +27,10 @@ Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScr
   `⌘O` opens one.
 - **Sidebar panes** — Items, saved Queries and the History of every query and commit, per connection.
 - **Inspector** — every field of the selected row; edit, set NULL, copy as JSON or INSERT (`⌘I`).
+- **JSON and arrays** — JSON values (`json`, `jsonb`, or JSON kept in a text column) are coloured in the grid and
+  indented in the inspector, where they stay editable; Postgres arrays show each item as a tag in the grid and one item
+  a line in the inspector. Changing only the layout is not an edit.
+- **Updates** — Trellis updates itself from the GitHub releases (see [Install](#install)).
 
 On its first launch Trellis brings over the connections saved by Strata (the earlier Electron build), without
 their passwords: type each password once.
@@ -51,16 +56,18 @@ sudo apt update && sudo apt install trellis
 
 Or download a file from the release: `sudo apt install ./Trellis_*_amd64.deb`, or the AppImage, which runs without
 installing (`chmod +x Trellis_*.AppImage && ./Trellis_*.AppImage`). Passwords go to the Secret Service (GNOME Keyring,
-or KWallet on KDE). Closing the last window quits Trellis on Linux.
+or KWallet on KDE). Closing the last window quits Trellis on Linux. Trellis turns off WebKit's DMA-BUF renderer, which
+leaves the window white with some GPUs and drivers; `WEBKIT_DISABLE_DMABUF_RENDERER=0 trellis` tries it anyway.
 
 **macOS** (Apple silicon, macOS 11 or newer) with Homebrew:
 
 ```sh
 brew tap therealtoresto/trellis https://github.com/therealtoresto/trellis
+brew trust therealtoresto/trellis
 brew install --cask trellis
 ```
 
-The cask ([Casks/trellis.rb](Casks/trellis.rb)) always installs the newest release and clears the quarantine flag, as
+Homebrew asks once to trust a tap from outside its own repositories (`brew trust`). The cask ([Casks/trellis.rb](Casks/trellis.rb)) always installs the newest release and clears the quarantine flag, as
 the app is not signed by Apple. Without Homebrew: unzip `Trellis_macos_arm64.zip` from the release, move `Trellis.app`
 to Applications, and open it the first time with right-click → Open (or run
 `xattr -dr com.apple.quarantine /Applications/Trellis.app`).
@@ -68,6 +75,10 @@ to Applications, and open it the first time with right-click → Open (or run
 **Updates** come from inside the app: the welcome window shows an *Update to x.y.z* button when a newer release is
 out, and **Trellis → Check for Updates…** looks on demand. Either downloads the release, checks its signature,
 installs it over the running copy (the `.app`, the AppImage, or the `.deb` through a password prompt) and restarts.
+This works for every copy from 0.3.0 on, however it was installed; Homebrew leaves the app to update itself. Copies
+of 0.2.x predate the updater: install 0.3.0 over them once by any of the ways above. An AppImage updates only where
+its user may write the file (such as `~/Applications`), and the repository has to stay public for updates to reach
+anyone.
 
 ### Building on Ubuntu
 
@@ -89,7 +100,8 @@ npm run release            # 0.2.0 → 0.2.1; or: npm run release minor | major 
 It sets the version in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`, commits it, tags the
 commit `v<version>` and pushes both. The tag starts [the workflow](.github/workflows/build.yml): it builds Ubuntu and
 macOS, opens the Ubuntu build on a virtual screen as a smoke test, and when both pass publishes the release with the
-`.deb`, the `.AppImage` and the zipped macOS app, its notes listing the commits since the last one. The welcome window
+`.deb`, the `.AppImage`, the zipped macOS app (`Trellis_macos_arm64.zip`, one name for every release), the signed
+update files and the apt repository, its notes listing the commits since the last one. The welcome window
 shows the version and the build number (the commit count), as in `Version 0.2.1 (18)`. To get the files without a
 release, run the Build workflow from the Actions tab: they appear under the run's Artifacts.
 

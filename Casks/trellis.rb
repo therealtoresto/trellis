@@ -1,4 +1,5 @@
 cask "trellis" do
+  # brew tap therealtoresto/trellis https://github.com/therealtoresto/trellis && brew trust therealtoresto/trellis
   # Always the newest release; Trellis updates itself after that (Trellis → Check for Updates…).
   version :latest
   sha256 :no_check
