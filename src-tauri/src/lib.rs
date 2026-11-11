@@ -280,7 +280,7 @@ fn create_welcome(app: &AppHandle) -> R<()> {
             .effects(WindowEffectsConfig { effects: vec![Effect::UnderWindowBackground], state: Some(EffectState::FollowsWindowActiveState), radius: None, color: None, interactive: false });
     }
     let w = b.build().map_err(err)?;
-    lights::place(&w);
+    lights::place_settled(&w);
     Ok(())
 }
 
@@ -306,6 +306,12 @@ fn debug_traffic_lights(window: Window) -> Value {
     let centers = window.app_handle().get_webview_window(window.label()).map(|w| lights::measure(&w)).unwrap_or_default();
     let spec = lights::spec(window.label());
     json!({ "centers": centers, "x": spec.x, "centerY": spec.center_y, "onlyClose": spec.only_close })
+}
+
+/// The page calls this once it has loaded, when the window has its final layout.
+#[tauri::command]
+fn place_lights(window: Window) {
+    replace_lights(&window);
 }
 
 #[tauri::command]
@@ -344,7 +350,7 @@ fn create_window(app: &AppHandle, connect: Option<String>) -> R<WebviewWindow> {
         b = b.position(120.0 + (n % 6) as f64 * 28.0, 80.0 + (n % 6) as f64 * 28.0);
     }
     let w = b.build().map_err(err)?;
-    lights::place(&w);
+    lights::place_settled(&w);
     Ok(w)
 }
 
@@ -502,7 +508,7 @@ pub fn run() {
             conns_list, conns_save, conns_delete, conns_test,
             db_connect, db_disconnect, db_objects, db_set_schema, db_all_columns, db_structure, db_page, db_query, db_preview, db_apply,
             demo_reset, dialog_open_sqlite, dialog_new_sqlite, file_open_sql, file_read_sql, file_save_sql, file_reveal,
-            clipboard_write, window_new, app_info, selftest_log, selftest_done, debug_traffic_lights, selftest_resize, about_info, open_connection_window, show_welcome, debug_windows,
+            clipboard_write, window_new, app_info, selftest_log, selftest_done, debug_traffic_lights, selftest_resize, about_info, open_connection_window, show_welcome, debug_windows, place_lights,
         ])
         .build(tauri::generate_context!())
         .expect("Trellis failed to start")

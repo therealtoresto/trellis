@@ -40,6 +40,7 @@
     selftestLog: text => call('selftest_log', { text }),
     selftestDone: () => call('selftest_done'),
     about: () => call('about_info'),
+    placeLights: () => call('place_lights').catch(() => {}),
     openConnectionWindow: id => call('open_connection_window', { id }),
     showWelcome: () => call('show_welcome'),
     debugWindows: () => call('debug_windows'),

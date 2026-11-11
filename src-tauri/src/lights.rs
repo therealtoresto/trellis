@@ -83,6 +83,19 @@ mod mac {
     }
 }
 
+/// Places the buttons now and again over the first second: AppKit lays a new window out after it is built
+/// and may move the buttons back without telling the window.
+pub fn place_settled(w: &tauri::WebviewWindow) {
+    place(w);
+    let w = w.clone();
+    std::thread::spawn(move || {
+        for ms in [60, 200, 500, 1000] {
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+            place(&w);
+        }
+    });
+}
+
 /// Places the buttons on the main thread.
 pub fn place(w: &tauri::WebviewWindow) {
     #[cfg(target_os = "macos")]

@@ -1879,6 +1879,7 @@ async function boot() {
   if (info.platform === 'darwin') document.documentElement.classList.add('mac');
   if (info.platform === 'darwin' && info.vibrancy) document.documentElement.classList.add('vibrant');
   fillIcons();
+  if (api.placeLights) api.placeLights();
   if (WELCOME) {
     api.onMenu(action => {
       if (overlayOpen()) { if (action === 'run' && modalPrimary) modalPrimary(); return; }
