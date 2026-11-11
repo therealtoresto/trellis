@@ -14,6 +14,7 @@ const APPROX_OVER: i64 = 200_000;
 
 pub struct Pg {
     client: Client,
+    tls: MakeTlsConnector,
 }
 
 /// One statement's output from the simple protocol.
@@ -70,20 +71,29 @@ impl Pg {
             .danger_accept_invalid_hostnames(!verify)
             .build()
             .map_err(err)?;
-        let (client, connection) = c.connect(MakeTlsConnector::new(tls)).await.map_err(pg_err)?;
+        let tls = MakeTlsConnector::new(tls);
+        let (client, connection) = c.connect(tls.clone()).await.map_err(pg_err)?;
         tokio::spawn(async move {
             let _ = connection.await;
         });
         client.batch_execute("SET standard_conforming_strings = on").await.map_err(pg_err)?;
-        Ok(Pg { client })
+        Ok(Pg { client, tls })
     }
 
     async fn simple(&self, sql: &str) -> R<Vec<Set>> {
-        let msgs = self.client.simple_query(sql).await.map_err(pg_err)?;
+        Ok(self.simple_capped(sql, usize::MAX).await?.0)
+    }
+
+    /// The sets of a simple query, keeping at most `cap` rows of each (the rest are read and dropped); true when rows
+    /// were dropped.
+    async fn simple_capped(&self, sql: &str, cap: usize) -> R<(Vec<Set>, bool)> {
+        use futures_util::StreamExt;
+        let stream = self.client.simple_query_raw(sql).await.map_err(pg_err)?;
+        futures_util::pin_mut!(stream);
         let mut sets: Vec<Set> = Vec::new();
-        let mut open = false;
-        for m in msgs {
-            match m {
+        let (mut open, mut truncated) = (false, false);
+        while let Some(m) = stream.next().await {
+            match m.map_err(pg_err)? {
                 SimpleQueryMessage::RowDescription(cols) => {
                     sets.push(Set { cols: Some(cols.iter().map(|c| c.name().to_string()).collect()), rows: vec![], changed: 0 });
                     open = true;
@@ -93,8 +103,12 @@ impl Pg {
                         sets.push(Set { cols: Some(r.columns().iter().map(|c| c.name().to_string()).collect()), rows: vec![], changed: 0 });
                         open = true;
                     }
-                    let row = (0..r.len()).map(|i| r.get(i).map(String::from)).collect();
-                    sets.last_mut().unwrap().rows.push(row);
+                    let set = sets.last_mut().unwrap();
+                    if set.rows.len() < cap {
+                        set.rows.push((0..r.len()).map(|i| r.get(i).map(String::from)).collect());
+                    } else {
+                        truncated = true;
+                    }
                 }
                 SimpleQueryMessage::CommandComplete(n) => {
                     if open { sets.last_mut().unwrap().changed = n; } else { sets.push(Set { cols: None, rows: vec![], changed: n }); }
@@ -103,7 +117,7 @@ impl Pg {
                 _ => {}
             }
         }
-        Ok(sets)
+        Ok((sets, truncated))
     }
 
     async fn rows(&self, sql: &str) -> R<Vec<Vec<Option<String>>>> {
@@ -337,10 +351,10 @@ impl Pg {
             Ok(st) => Some(st.columns().iter().map(|c| kind(c.type_().name())).collect()),
             Err(_) => None,
         };
-        let sets = self.simple(sql).await?;
+        let (sets, truncated) = self.simple_capped(sql, common::MAX_ROWS).await?;
         let ms = common::ms(t0);
         let changed = sets.last().map(|s| s.changed).unwrap_or(0);
-        let mut out = QueryResult { changed, ms, write: is_write(sql), ..Default::default() };
+        let mut out = QueryResult { changed, ms, truncated, write: is_write(sql), ..Default::default() };
         if let Some(set) = sets.into_iter().rev().find(|s| s.cols.is_some()) {
             let cols = set.cols.unwrap_or_default();
             let kinds = types.filter(|t| t.len() == cols.len()).unwrap_or_else(|| vec![Kind::Text; cols.len()]);
@@ -353,6 +367,10 @@ impl Pg {
             out.columns = Some(cols);
         }
         Ok(out)
+    }
+
+    pub fn canceller(&self) -> Canceller {
+        Canceller::Postgres(self.client.cancel_token(), self.tls.clone())
     }
 
     pub fn preview(&self, ch: &Changes) -> R<Vec<Statement>> {

@@ -5,6 +5,9 @@ use super::{Changes, Column, Filter, Statement, R};
 use serde_json::{json, Value};
 use std::time::Instant;
 
+/// A query keeps this many rows of its result; a stray SELECT on a big table stops there instead of filling memory.
+pub const MAX_ROWS: usize = 50_000;
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Dialect {
     Sqlite,

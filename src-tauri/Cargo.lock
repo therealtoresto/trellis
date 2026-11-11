@@ -5618,6 +5618,7 @@ dependencies = [
 name = "trellis"
 version = "0.3.0"
 dependencies = [
+ "futures-util",
  "keyring",
  "mysql_async",
  "native-tls",

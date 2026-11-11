@@ -27,6 +27,8 @@ struct Session {
 struct AppState {
     store: Store,
     sessions: Mutex<HashMap<String, Arc<Mutex<Session>>>>,
+    /// Per window, what stops its running statement; kept apart from the session, which is locked while it runs.
+    cancels: std::sync::Mutex<HashMap<String, drivers::Canceller>>,
 }
 
 /// Set once the app is quitting, so closing its last workspace does not bring the welcome window back.
@@ -74,6 +76,7 @@ async fn db_connect(window: Window, state: State<'_, AppState>, id: String) -> R
     }
     let mut driver = Driver::open(&state.store.config(&conn)?).await?;
     let info = driver.info().await?;
+    state.cancels.lock().unwrap().insert(window.label().to_string(), driver.canceller());
     state.sessions.lock().await.insert(window.label().to_string(), Arc::new(Mutex::new(Session { driver })));
     let name = conn.get("name").and_then(Value::as_str).unwrap_or("Trellis");
     let _ = window.set_title(&format!("{name} — Trellis"));
@@ -87,6 +90,7 @@ async fn db_connect(window: Window, state: State<'_, AppState>, id: String) -> R
 #[tauri::command]
 async fn db_disconnect(window: Window, state: State<'_, AppState>) -> R<()> {
     state.sessions.lock().await.remove(window.label());
+    state.cancels.lock().unwrap().remove(window.label());
     let _ = window.set_title("Trellis");
     replace_lights(&window);
     Ok(())
@@ -120,6 +124,13 @@ async fn db_page(window: Window, state: State<'_, AppState>, target: Ref, opts: 
 #[tauri::command]
 async fn db_query(window: Window, state: State<'_, AppState>, sql: String) -> R<drivers::QueryResult> {
     session(&state, &window).await?.lock().await.driver.query(&sql).await
+}
+
+/// Stops the statement this window is running; its query then ends with the server's cancel error.
+#[tauri::command]
+async fn db_cancel(window: Window, state: State<'_, AppState>) -> R<()> {
+    let c = state.cancels.lock().unwrap().get(window.label()).cloned().ok_or_else(|| "Not connected.".to_string())?;
+    c.cancel().await
 }
 
 #[tauri::command]
@@ -544,7 +555,7 @@ pub fn run() {
                 Err(_) => app.path().app_data_dir()?,
             };
             let demo = app.path().resolve("gamification_demo.sqlite", tauri::path::BaseDirectory::Resource)?;
-            app.manage(AppState { store: Store::new(dir, demo), sessions: Mutex::new(HashMap::new()) });
+            app.manage(AppState { store: Store::new(dir, demo), sessions: Mutex::new(HashMap::new()), cancels: Default::default() });
             app.set_menu(build_menu(&handle)?)?;
             app.on_menu_event(|app, event| {
                 let id = event.id().as_ref().to_string();
@@ -571,6 +582,7 @@ pub fn run() {
                 let state = window.state::<AppState>();
                 let label = window.label().to_string();
                 tauri::async_runtime::block_on(async { state.sessions.lock().await.remove(&label); });
+                state.cancels.lock().unwrap().remove(&label);
                 // Closing the last workspace brings the welcome window back, as in TablePlus.
                 let app = window.app_handle();
                 let workspaces = app.webview_windows().keys().filter(|l| l.starts_with("trellis-") && **l != label).count();
@@ -581,7 +593,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             conns_list, conns_save, conns_delete, conns_test,
-            db_connect, db_disconnect, db_objects, db_set_schema, db_all_columns, db_structure, db_page, db_query, db_preview, db_apply,
+            db_connect, db_disconnect, db_objects, db_set_schema, db_all_columns, db_structure, db_page, db_query, db_cancel, db_preview, db_apply,
             demo_reset, dialog_open_sqlite, dialog_new_sqlite, file_open_sql, file_read_sql, file_save_sql, file_reveal,
             clipboard_write, window_new, app_info, selftest_log, selftest_done, debug_traffic_lights, selftest_resize, about_info, open_connection_window, show_welcome, debug_windows, place_lights,
             update_check, update_install,

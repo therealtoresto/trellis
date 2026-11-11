@@ -20,6 +20,7 @@
     structure: target => call('db_structure', { target }),
     page: (target, opts) => call('db_page', { target, opts }),
     query: sql => call('db_query', { sql }),
+    cancelQuery: () => call('db_cancel'),
     preview: changes => call('db_preview', { changes }),
     apply: changes => call('db_apply', { changes }),
     resetDemo: () => call('demo_reset'),

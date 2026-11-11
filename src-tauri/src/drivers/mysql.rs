@@ -14,6 +14,8 @@ const APPROX_OVER: i64 = 200_000;
 
 pub struct My {
     conn: Conn,
+    /// How this connection was opened, for the second connection that cancels a statement.
+    opts: mysql_async::Opts,
     database: Option<String>,
     d: Dialect,
 }
@@ -86,12 +88,12 @@ impl My {
         };
         let mut last = String::new();
         for ssl in attempts {
-            let opts = base.clone().ssl_opts(ssl);
-            match tokio::time::timeout(Duration::from_secs(10), Conn::new(opts)).await {
+            let opts: mysql_async::Opts = base.clone().ssl_opts(ssl).into();
+            match tokio::time::timeout(Duration::from_secs(10), Conn::new(opts.clone())).await {
                 Ok(Ok(mut conn)) => {
                     let sql_mode: Option<String> = conn.query_first("SELECT @@SESSION.sql_mode").await.map_err(my_err)?;
                     let backslash = !sql_mode.unwrap_or_default().contains("NO_BACKSLASH_ESCAPES");
-                    return Ok(My { conn, database, d: Dialect::Mysql { backslash } });
+                    return Ok(My { conn, opts, database, d: Dialect::Mysql { backslash } });
                 }
                 Ok(Err(e)) => last = my_err(e),
                 Err(_) => last = "The server did not answer within 10 seconds.".into(),
@@ -101,15 +103,23 @@ impl My {
     }
 
     async fn sets(&mut self, sql: &str) -> R<Vec<Set>> {
+        Ok(self.sets_capped(sql, usize::MAX).await?.0)
+    }
+
+    /// Each result set with at most `cap` rows (the rest are read and dropped); true when rows were dropped.
+    async fn sets_capped(&mut self, sql: &str, cap: usize) -> R<(Vec<Set>, bool)> {
         let mut res = self.conn.query_iter(sql).await.map_err(my_err)?;
-        let mut out = Vec::new();
+        let (mut out, mut truncated) = (Vec::new(), false);
         loop {
             let cols = res.columns().map(|c| c.to_vec()).unwrap_or_default();
-            let rows: Vec<MyRow> = res.collect().await.map_err(my_err)?;
+            let mut rows: Vec<MyRow> = Vec::new();
+            while let Some(row) = res.next().await.map_err(my_err)? {
+                if rows.len() < cap { rows.push(row); } else { truncated = true; }
+            }
             out.push(Set { cols, rows, changed: res.affected_rows() });
             if res.is_empty() { break; }
         }
-        Ok(out)
+        Ok((out, truncated))
     }
 
     async fn rows(&mut self, sql: &str) -> R<Vec<Vec<Value>>> {
@@ -294,16 +304,20 @@ impl My {
 
     pub async fn query(&mut self, sql: &str) -> R<QueryResult> {
         let t0 = Instant::now();
-        let sets = self.sets(sql).await?;
+        let (sets, truncated) = self.sets_capped(sql, common::MAX_ROWS).await?;
         let ms = common::ms(t0);
         let changed = sets.last().map(|s| s.changed).unwrap_or(0);
-        let mut out = QueryResult { changed, ms, write: is_write(sql), ..Default::default() };
+        let mut out = QueryResult { changed, ms, truncated, write: is_write(sql), ..Default::default() };
         if let Some(set) = sets.into_iter().rev().find(|s| !s.cols.is_empty()) {
             let kinds: Vec<Option<Kind>> = set.cols.iter().map(kind_of).collect();
             out.columns = Some(set.cols.iter().map(|c| c.name_str().to_string()).collect());
             out.values = Some(set.rows.iter().map(|r| (0..kinds.len()).map(|i| cell(r.as_ref(i), kinds[i])).collect()).collect());
         }
         Ok(out)
+    }
+
+    pub fn canceller(&self) -> Canceller {
+        Canceller::Mysql(self.opts.clone(), self.conn.id())
     }
 
     pub fn preview(&self, ch: &Changes) -> R<Vec<Statement>> {

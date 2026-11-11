@@ -179,6 +179,10 @@ impl Sqlite {
                 let mut values = Vec::new();
                 let mut rows = st.raw_query();
                 while let Some(r) = rows.next().map_err(err)? {
+                    if values.len() >= common::MAX_ROWS {
+                        out.truncated = true;
+                        break;
+                    }
                     values.push((0..n).map(|i| val(r.get_ref_unwrap(i))).collect());
                 }
                 out.columns = Some(names);
@@ -189,6 +193,10 @@ impl Sqlite {
         }
         out.ms = common::ms(t0);
         Ok(out)
+    }
+
+    pub fn canceller(&self) -> Canceller {
+        Canceller::Sqlite(std::sync::Arc::new(self.conn.get_interrupt_handle()))
     }
 
     pub fn preview(&self, ch: &Changes) -> R<Vec<Statement>> {

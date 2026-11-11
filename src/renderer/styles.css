@@ -768,6 +768,7 @@ kbd {
 .q-msg { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .q-msg .bad { color: var(--deleted); font-weight: 600; }
 .q-msg .good { color: var(--added); font-weight: 600; }
+.q-msg .warn { color: var(--modified); font-weight: 600; }
 .q-error {
   margin: 14px;
   padding: 12px 14px;

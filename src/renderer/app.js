@@ -963,22 +963,24 @@ async function execQuery(tab, text) {
     });
     return;
   }
-  tab.running = true;
+  tab.running = true; tab.cancelled = false;
   renderRunButton(tab);
   try {
     const r = await api.query(sql);
     tab.result = r.columns ? { columns: r.columns, values: r.values } : null;
     tab.error = null; tab.sel = null; tab.sort = null; tab.widths = [];
     tab.msg = r.columns
-      ? `<span class="good">${plural(r.values.length, 'row')}</span> · ${fmtMs(r.ms)}`
+      ? `<span class="good">${plural(r.values.length, 'row')}</span>${r.truncated ? ' <span class="warn" title="The query returned more rows; add a LIMIT or a WHERE to see others.">· the first ' + r.values.length.toLocaleString() + ' only</span>' : ''} · ${fmtMs(r.ms)}`
       : `<span class="good">${esc(r.command || 'Query OK')}</span> · ${plural(r.changed, 'row')} affected · ${fmtMs(r.ms)}`;
     pushHistory(sql, true, r.ms);
     if (r.write) afterWrite();
   } catch (e) {
-    tab.error = e.message; tab.result = null; tab.msg = '<span class="bad">Error</span>';
+    // A stopped query fails with the server's cancel message; it is no error of the query's own.
+    if (tab.cancelled) { tab.error = null; tab.result = null; tab.msg = '<span class="warn">Stopped</span>'; }
+    else { tab.error = e.message; tab.result = null; tab.msg = '<span class="bad">Error</span>'; }
     pushHistory(sql, false, 0);
   }
-  tab.running = false;
+  tab.running = false; tab.cancelled = false;
   if (cur() === tab) { renderQueryResult(tab); renderRunButton(tab); renderInspector(); renderStatus(); }
 }
 
@@ -1238,8 +1240,9 @@ function renderRunButton(tab) {
   if (!b || cur() !== tab) return;
   const ta = $('#tabBody textarea.sql-input');
   const selection = ta && ta.selectionStart !== ta.selectionEnd;
-  b.disabled = tab.running;
-  b.innerHTML = tab.running ? '<span class="spin"></span>Running…' : `${ic('play')}<span id="runLbl">${selection ? 'Run selection' : 'Run'}</span><kbd>${MOD}↵</kbd>`;
+  b.disabled = !!tab.cancelled;
+  b.title = tab.running ? 'Stop the query' : '';
+  b.innerHTML = tab.running ? `<span class="spin"></span>${tab.cancelled ? 'Stopping…' : 'Stop'}<kbd>${MOD}.</kbd>` : `${ic('play')}<span id="runLbl">${selection ? 'Run selection' : 'Run'}</span><kbd>${MOD}↵</kbd>`;
 }
 
 function syncEditor() {
@@ -1556,6 +1559,7 @@ function wireEditor(tab, ta) {
       if (e.key === 'Escape') { e.preventDefault(); hideAc(); return; }
     }
     if (mod && e.key === 'Enter') { e.preventDefault(); runActive(); return; }
+    if (mod && e.key === '.') { e.preventDefault(); const t = cur(); if (t) stopQuery(t); return; }
     if (e.key === 'Tab' && !mod) {
       e.preventDefault();
       if (!document.execCommand('insertText', false, '  ')) ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end');
@@ -1568,10 +1572,19 @@ function wireEditor(tab, ta) {
 function runActive() {
   const tab = cur();
   if (!tab || tab.kind !== 'query') return;
+  if (tab.running) return stopQuery(tab);
   const ta = $('#tabBody textarea.sql-input');
   const text = ta && ta.selectionStart !== ta.selectionEnd ? ta.value.slice(ta.selectionStart, ta.selectionEnd) : tab.sql;
   if (!text.trim()) { toast('Write a query first', true); return; }
   execQuery(tab, text);
+}
+
+// Asks the server to stop the running statement; the query then ends as "Stopped".
+function stopQuery(tab) {
+  if (!tab.running || tab.cancelled) return;
+  tab.cancelled = true;
+  renderRunButton(tab);
+  api.cancelQuery().catch(e => { tab.cancelled = false; renderRunButton(tab); toast(`Could not stop the query: ${e.message}`, true); });
 }
 
 /* ---------- clipboard ---------- */
@@ -2170,6 +2183,10 @@ async function boot() {
     const what = [n ? plural(n, 'uncommitted change') : '', files ? plural(files, 'unsaved query file') : ''].filter(Boolean).join(' and ');
     showModal({ title: `Close with ${what}?`, text: 'Closing the window drops them.', actions: [{ label: 'Cancel' }, { label: 'Close window', cls: 'danger', primary: true, run: () => api.closeWindow() }] });
   });
+  // ⌘. stops the running query from anywhere in the window.
+  document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === '.' && cur() && cur().running) { e.preventDefault(); stopQuery(cur()); }
+  });
   // ⌘K opens the same palette as ⌘P.
   document.addEventListener('keydown', e => {
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'k' && !overlayOpen()) { e.preventDefault(); showPalette(); }
@@ -2179,7 +2196,7 @@ async function boot() {
   if (connect) await connectTo(connect);
   else await showOpenConnection();
   if (info.selftest) { const sc = document.createElement('script'); sc.src = 'selftest.js'; document.body.appendChild(sc); }
-  window.__trellis = { S, connectTo, openTable, newQueryTab, runActive, reviewChanges, showPalette, selectCell, startEdit, stageEdit, refreshGrid, cur, setSchema, setPane, saveQuery, openQueryText, openManager, showConnMenu, showOpenConnection, showConnForm, blankForm };
+  window.__trellis = { S, stopQuery, connectTo, openTable, newQueryTab, runActive, reviewChanges, showPalette, selectCell, startEdit, stageEdit, refreshGrid, cur, setSchema, setPane, saveQuery, openQueryText, openManager, showConnMenu, showOpenConnection, showConnForm, blankForm };
 }
 
 boot();

@@ -129,6 +129,29 @@
       return r;
     });
   };
+  // A long query stops on ⌘. (or the Stop button) and a huge result keeps its first 50,000 rows.
+  const stopAndCap = async () => {
+    await step('stop a running query', async () => {
+      T.newQueryTab('WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n) SELECT count(*) FROM n');
+      T.runActive();
+      await sleep(400);
+      const button = $('#runBtn').textContent;
+      const t0 = performance.now();
+      T.stopQuery(T.cur());
+      for (let i = 0; i < 100 && T.cur().running; i++) await sleep(50);
+      const r = { button, running: T.cur().running, msg: $('#qmsg').textContent, error: T.cur().error, ms: Math.round(performance.now() - t0), after: $('#runBtn').textContent };
+      r.ok = /Stop/.test(button) && !r.running && r.msg === 'Stopped' && !r.error && /Run/.test(r.after);
+      return r;
+    });
+    await step('huge result is capped', async () => {
+      T.newQueryTab('WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 60000) SELECT i FROM n');
+      T.runActive();
+      for (let i = 0; i < 100 && !T.cur().result; i++) await sleep(100);
+      const r = { rows: T.cur().result && T.cur().result.values.length, msg: $('#qmsg').textContent };
+      r.ok = r.rows === 50000 && /the first 50,000 only/.test(r.msg);
+      return r;
+    });
+  };
   // How long the page takes to follow a window resize: from the new size until it has painted at that size.
   const resizeTiming = async () => {
     await step('resize follows the window', async () => {
@@ -155,6 +178,7 @@
     await resizeTiming();
     await bigGrid();
     await jsonCells();
+    await stopAndCap();
     await trellis.selftestLog('done');
     return trellis.selftestDone();
   }
@@ -195,6 +219,7 @@
   });
   await bigGrid();
   await jsonCells();
+  await stopAndCap();
   await step('blob cell', async () => { const t = T.newQueryTab("SELECT x'00ff' AS b, 9007199254740993 AS big, 1.5 AS f, NULL AS n"); T.runActive(); await sleep(300); return [...document.querySelectorAll('.grid tbody td')].map(td => td.textContent); });
 
   const pg = { name: 'Shop — staging', engine: 'postgres', env: 'staging', host: '127.0.0.1', port: 55432, user: 'postgres', password: 'strata', database: 'shop', sslMode: 'prefer' };

@@ -192,3 +192,50 @@ async fn postgres() {
 async fn mysql() {
     check_server("mysql", 53306, "root", "shop", "prefer").await;
 }
+
+/// A long statement stops when its canceller fires from another task, and the connection still works after.
+async fn check_cancel(engine: &str, port: u16, user: &str, sleep_sql: &str) {
+    let Some(mut d) = server(engine, port, user, "prefer").await else {
+        eprintln!("skip {engine} cancel: no server on {port}");
+        return;
+    };
+    let c = d.canceller();
+    let t = tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        c.cancel().await
+    });
+    let t0 = std::time::Instant::now();
+    let r = d.query(sleep_sql).await;
+    t.await.unwrap().unwrap();
+    assert!(t0.elapsed().as_secs() < 5, "{engine}: the statement ran on after the cancel");
+    // MySQL's KILL QUERY makes SLEEP return 1 rather than fail; Postgres fails the statement.
+    if engine == "postgres" { assert!(r.is_err()); }
+    assert!(d.query("SELECT 1").await.is_ok(), "{engine}: the connection still works");
+}
+
+#[tokio::test]
+async fn sqlite_cancel_and_cap() {
+    let cfg = Config { engine: "sqlite".into(), file: Some(":memory:".into()), ..Default::default() };
+    let mut d = Driver::open(&cfg).await.unwrap();
+    let q = d.query("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 60000) SELECT i FROM n").await.unwrap();
+    assert!(q.truncated);
+    assert_eq!(q.values.unwrap().len(), common::MAX_ROWS);
+    let c = d.canceller();
+    let t = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        tokio::runtime::Runtime::new().unwrap().block_on(c.cancel())
+    });
+    let r = d.query("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n) SELECT count(*) FROM n").await;
+    t.join().unwrap().unwrap();
+    assert!(r.unwrap_err().contains("interrupt"));
+}
+
+#[tokio::test]
+async fn postgres_cancel() {
+    check_cancel("postgres", 55432, "postgres", "SELECT pg_sleep(30)").await;
+}
+
+#[tokio::test]
+async fn mysql_cancel() {
+    check_cancel("mysql", 53306, "root", "SELECT SLEEP(30)").await;
+}

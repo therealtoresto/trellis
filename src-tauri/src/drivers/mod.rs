@@ -115,13 +115,15 @@ pub struct Structure {
     pub ddl: String,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, Debug)]
 pub struct QueryResult {
     pub columns: Option<Vec<String>>,
     pub values: Option<Vec<Vec<Value>>>,
     pub changed: u64,
     pub ms: f64,
     pub write: bool,
+    /// The result had more rows than [`common::MAX_ROWS`]; only that many came back.
+    pub truncated: bool,
 }
 
 #[derive(Serialize)]
@@ -215,6 +217,34 @@ impl Config {
     }
 }
 
+/// Stops the statement a window is running. It works outside the lock the session holds while the statement runs.
+#[derive(Clone)]
+pub enum Canceller {
+    Sqlite(std::sync::Arc<rusqlite::InterruptHandle>),
+    Postgres(tokio_postgres::CancelToken, postgres_native_tls::MakeTlsConnector),
+    /// MySQL stops a statement with KILL QUERY from a second connection.
+    Mysql(mysql_async::Opts, u32),
+}
+
+impl Canceller {
+    pub async fn cancel(&self) -> R<()> {
+        match self {
+            Canceller::Sqlite(h) => {
+                h.interrupt();
+                Ok(())
+            }
+            Canceller::Postgres(token, tls) => token.cancel_query(tls.clone()).await.map_err(err),
+            Canceller::Mysql(opts, id) => {
+                use mysql_async::prelude::Queryable;
+                let mut c = mysql_async::Conn::new(opts.clone()).await.map_err(err)?;
+                c.query_drop(format!("KILL QUERY {id}")).await.map_err(err)?;
+                let _ = c.disconnect().await;
+                Ok(())
+            }
+        }
+    }
+}
+
 pub enum Driver {
     Sqlite(sqlite::Sqlite),
     Postgres(postgres::Pg),
@@ -239,6 +269,9 @@ impl Driver {
             "mysql" => Ok(Driver::Mysql(mysql::My::open(cfg).await?)),
             other => Err(format!("Unknown engine {other}")),
         }
+    }
+    pub fn canceller(&self) -> Canceller {
+        each!(self, d => d.canceller())
     }
     pub async fn info(&mut self) -> R<Info> {
         each!(self, d => d.info().await)
