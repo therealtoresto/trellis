@@ -513,8 +513,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("Trellis failed to start")
         .run(|app, event| match event {
-            // Closing the welcome window with nothing else open keeps Trellis in the Dock; ⌘Q still quits.
-            tauri::RunEvent::ExitRequested { code: None, api, .. } if !QUITTING.load(Ordering::SeqCst) => api.prevent_exit(),
+            // Closing the last window keeps Trellis in the Dock. A quit (⌘Q, the Dock menu) arrives while windows
+            // are still open, and goes through.
+            tauri::RunEvent::ExitRequested { code: None, api, .. } if app.webview_windows().is_empty() && !QUITTING.load(Ordering::SeqCst) => api.prevent_exit(),
             tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => QUITTING.store(true, Ordering::SeqCst),
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { has_visible_windows: false, .. } => { let _ = create_welcome(app); }

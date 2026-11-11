@@ -16,7 +16,7 @@
     "test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "icon": "tauri icon assets/icon.png -o src-tauri/icons && rm -rf src-tauri/icons/android src-tauri/icons/ios src-tauri/icons/Square*.png src-tauri/icons/StoreLogo.png src-tauri/icons/icon.ico src-tauri/icons/64x64.png",
     "demo-db": "node scripts/demo-db.js",
-    "install-app": "tauri build && rm -rf /Applications/Trellis.app && cp -R src-tauri/target/release/bundle/macos/Trellis.app /Applications/"
+    "install-app": "scripts/install-app.sh"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4",
