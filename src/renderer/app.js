@@ -1773,10 +1773,94 @@ function exportMenu(anchor) {
   ]);
 }
 
-// A small menu below `anchor`; items are {label, icon, sub, run, danger} or 'sep'.
+/* ---------- context menus ---------- */
+const tableSql = tab => `${tab.ref.schema ? qid(tab.ref.schema) + '.' : ''}${qid(tab.ref.name)}`;
+const rowJson = (tab, row) => JSON.stringify(Object.fromEntries(tab.model.cols.map((c, i) => [c.name, exportJsonValue(row.vals[i], c)])), null, 2);
+const rowInsert = (tab, row) => `INSERT INTO ${tab.kind === 'table' ? tableSql(tab) : qid('result')} (${tab.model.cols.map(c => qid(c.name)).join(', ')}) VALUES (${row.vals.map(exportSql).join(', ')});`;
+
+// Narrows the table to rows whose column equals (or, with `not`, differs from) this value.
+function filterBy(tab, ci, v, not) {
+  const col = tab.cols[ci].name;
+  const f = v === null || v === undefined ? { col, op: not ? 'notnull' : 'null', val: '' } : { col, op: not ? '!=' : '=', val: exportText(v) };
+  const kept = tab.filters.filter(x => x.op === 'null' || x.op === 'notnull' || x.val !== '');
+  tab.filters = [...kept, f];
+  applyFilters(tab, false);
+}
+
+// Right-click on a cell: copy it, its row or its column's name, filter by it, follow its key, edit it.
+function cellMenu(e, ri, ci) {
+  const tab = cur();
+  if (!tab || !tab.model) return;
+  const row = tab.model.rows[ri], col = tab.model.cols[ci];
+  if (!row || !col) return;
+  selectCell(ri, ci, false);
+  const v = row.vals[ci], isNull = v === null || v === undefined;
+  const isTable = tab.kind === 'table', edit = isEditable(tab) && row.cls !== 'is-del', fk = !isNull && fkOf(tab, ci);
+  const short = isNull ? 'NULL' : shown(v).length > 24 ? shown(v).slice(0, 24) + '…' : shown(v);
+  const items = [
+    { label: 'Copy value', icon: 'copy', sub: `${MOD}C`, run: () => copy(isNull ? 'NULL' : exportText(v) ?? shown(v), 'Cell copied') },
+    { label: 'Copy row as JSON', icon: 'copy', run: () => copy(rowJson(tab, row), 'Row copied as JSON') },
+    { label: 'Copy row as INSERT', icon: 'copy', run: () => copy(rowInsert(tab, row), 'Row copied as INSERT') },
+    { label: `Copy column name “${col.name}”`, icon: 'copy', run: () => copy(col.name, 'Column name copied') },
+  ];
+  if (isTable) items.push('sep',
+    { label: `Filter: ${col.name} ${isNull ? 'is NULL' : '= ' + short}`, icon: 'filter', run: () => filterBy(tab, ci, v, false) },
+    { label: `Filter: ${col.name} ${isNull ? 'is not NULL' : '≠ ' + short}`, icon: 'filter', run: () => filterBy(tab, ci, v, true) });
+  if (fk) items.push({ label: `Open ${fk.table} where ${fk.to} = ${short}`, icon: 'arrowr', run: () => followFk(tab, ri, ci) });
+  if (edit) {
+    items.push('sep', { label: 'Edit cell', icon: 'pencil', sub: '↵', run: () => startEdit(ri, ci) });
+    if (!col.notnull && !isNull) items.push({ label: 'Set to NULL', icon: 'x', run: () => { stageEdit(tab, ri, ci, null); refreshGrid(); } });
+    items.push({ label: row.cls === 'is-del' ? 'Restore row' : 'Delete row', icon: 'trash', sub: `${MOD}⌫`, danger: true, run: toggleDelete });
+  } else if (isEditable(tab) && row.cls === 'is-del') items.push('sep', { label: 'Restore row', icon: 'trash', run: toggleDelete });
+  popMenu({ x: e.clientX, y: e.clientY }, items);
+}
+
+// Right-click on a column header: sort by it, copy its name, filter on it.
+function headerMenu(e, ci) {
+  const tab = cur();
+  const col = tab && tab.model && tab.model.cols[ci];
+  if (!col) return;
+  const sortBy = async dir => { tab.sort = dir ? { ci, dir } : null; tab.sel = null; if (tab.kind === 'table') await reloadTab(tab); else refreshGrid(); };
+  const items = [
+    { label: 'Sort ascending', icon: 'updown', run: () => sortBy('ASC') },
+    { label: 'Sort descending', icon: 'updown', run: () => sortBy('DESC') },
+    ...(tab.sort ? [{ label: 'Clear sort', icon: 'x', run: () => sortBy(null) }] : []),
+    'sep',
+    { label: `Copy name “${col.name}”`, icon: 'copy', run: () => copy(col.name, 'Column name copied') },
+  ];
+  if (tab.kind === 'table') items.push({ label: 'Filter on this column…', icon: 'filter', run: () => {
+    readFilters(tab);
+    const blank = tab.filters.find(x => x.val === '' && x.op !== 'null' && x.op !== 'notnull');
+    if (blank) { blank.col = col.name; blank.op = '='; } else tab.filters.push({ col: col.name, op: '=', val: '' });
+    renderFilters(tab);
+    const inputs = $$('#filterbar .fval');
+    const inp = inputs[tab.filters.indexOf(blank || tab.filters[tab.filters.length - 1])];
+    if (inp) inp.focus();
+  } });
+  popMenu({ x: e.clientX, y: e.clientY }, items);
+}
+
+// Right-click on a table or view in the sidebar.
+function sideTableMenu(e, ref) {
+  const obj = [...S.schema.tables, ...S.schema.views].find(t => refKey(t.ref) === refKey(ref));
+  const name = obj ? obj.name : ref.name;
+  const full = `${ref.schema ? qid(ref.schema) + '.' : ''}${qid(ref.name)}`;
+  popMenu({ x: e.clientX, y: e.clientY }, [
+    { label: 'Open', icon: 'table', run: () => openTable(ref) },
+    { label: 'Open structure', icon: 'columns', sub: `${MOD}2`, run: () => openTable(ref, true, 'structure') },
+    { label: `SELECT * FROM ${name} in a new query`, icon: 'code', run: () => newQueryTab(`SELECT * FROM ${full} LIMIT 100;`, true) },
+    'sep',
+    { label: 'Copy name', icon: 'copy', run: () => copy(name, 'Name copied') },
+    { label: 'Copy qualified name', icon: 'copy', run: () => copy(full, 'Name copied') },
+  ]);
+}
+
+// A small menu below `anchor` (an element, or a point {x, y}); items are {label, icon, sub, run, danger} or 'sep'.
 function popMenu(anchor, items) {
   const ov = $('#overlay');
-  const r = anchor ? anchor.getBoundingClientRect() : { left: innerWidth / 2 - 120, right: innerWidth / 2 + 120, top: innerHeight / 3, bottom: innerHeight / 3 };
+  const r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect()
+    : anchor && 'x' in anchor ? { left: anchor.x, right: anchor.x, top: anchor.y - 6, bottom: anchor.y - 6 }
+    : { left: innerWidth / 2 - 120, right: innerWidth / 2 + 120, top: innerHeight / 3, bottom: innerHeight / 3 };
   const h = items.length * 30 + 12;
   const top = r.bottom + 6 + h > innerHeight ? Math.max(8, r.top - 6 - h) : r.bottom + 6;
   ov.innerHTML = `<div class="scrim" data-scrim style="background:transparent;animation:none"></div><div class="menu glass-strong" role="menu" style="top:${top}px;left:${Math.max(8, Math.min(r.left, innerWidth - 268))}px;min-width:240px">
@@ -1991,6 +2075,8 @@ function wireWorkspace() {
     }
   });
   $('#sideList').addEventListener('contextmenu', e => {
+    const o = e.target.closest('[data-ref]');
+    if (o) { e.preventDefault(); return sideTableMenu(e, JSON.parse(o.dataset.ref)); }
     const q = e.target.closest('[data-query]');
     if (q) { e.preventDefault(); api.reveal(q.dataset.query).catch(err => toast(err.message, true)); }
   });
@@ -2061,6 +2147,12 @@ function wireWorkspace() {
       focusGrid();
     }
   });
+  body.addEventListener('contextmenu', e => {
+    const td = e.target.closest('td[data-c]');
+    if (td && !td.classList.contains('editing')) { e.preventDefault(); return cellMenu(e, +td.parentElement.dataset.r, +td.dataset.c); }
+    const th = e.target.closest('th[data-ci]');
+    if (th) { e.preventDefault(); return headerMenu(e, +th.dataset.ci); }
+  });
   body.addEventListener('dblclick', e => {
     if (e.target.closest('[data-fk]')) return;
     const td = e.target.closest('td[data-c]');
@@ -2126,15 +2218,8 @@ function wireWorkspace() {
     const a = e.target.closest('[data-act]');
     if (!a || !tab || !tab.sel || !tab.model) return;
     const row = tab.model.rows[tab.sel.r];
-    // A JSON value goes in as JSON rather than as an escaped string, unless a number in it is too big to keep.
-    const asValue = (v, c) => {
-      if (blobLen(v) !== null) return shown(v);
-      const st = structured(v, c);
-      return st && st.json && !st.json.some(t => /^-?\d{16,}/.test(t)) ? JSON.parse(v) : v;
-    };
-    const obj = Object.fromEntries(tab.model.cols.map((c, i) => [c.name, asValue(row.vals[i], c)]));
-    if (a.dataset.act === 'copy-json') copy(JSON.stringify(obj, null, 2), 'Row copied as JSON');
-    if (a.dataset.act === 'copy-insert') copy(`INSERT INTO ${tab.ref.schema ? qid(tab.ref.schema) + '.' : ''}${qid(tab.ref.name)} (${tab.cols.map(c => qid(c.name)).join(', ')}) VALUES (${row.vals.map(sqlLit).join(', ')});`, 'Row copied as INSERT');
+    if (a.dataset.act === 'copy-json') copy(rowJson(tab, row), 'Row copied as JSON');
+    if (a.dataset.act === 'copy-insert') copy(rowInsert(tab, row), 'Row copied as INSERT');
   });
 
   // ⌘C on a selected cell copies its value; everywhere else the system copy runs.
@@ -2391,7 +2476,7 @@ async function boot() {
   if (connect) await connectTo(connect);
   else await showOpenConnection();
   if (info.selftest) { const sc = document.createElement('script'); sc.src = 'selftest.js'; document.body.appendChild(sc); }
-  window.__trellis = { S, stopQuery, exportTab, connectTo, openTable, newQueryTab, runActive, reviewChanges, showPalette, selectCell, startEdit, stageEdit, refreshGrid, cur, setSchema, setPane, saveQuery, openQueryText, openManager, showConnMenu, showOpenConnection, showConnForm, blankForm };
+  window.__trellis = { S, stopQuery, exportTab, cellMenu, connectTo, openTable, newQueryTab, runActive, reviewChanges, showPalette, selectCell, startEdit, stageEdit, refreshGrid, cur, setSchema, setPane, saveQuery, openQueryText, openManager, showConnMenu, showOpenConnection, showConnForm, blankForm };
 }
 
 boot();

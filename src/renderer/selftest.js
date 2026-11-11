@@ -213,6 +213,37 @@
       return r;
     });
   };
+  // Right-click menus on a cell, a header and a sidebar table; filtering by a cell narrows the table.
+  const contextMenus = async () => {
+    await step('context menus', async () => {
+      await T.openTable({ name: 'players' }); await sleep(300);
+      const tab = T.cur(), ci = tab.cols.findIndex(c => c.name === 'country');
+      const value = tab.model.rows[0].vals[ci];
+      const td = $(`#tabBody tr[data-r="0"] td[data-c="${ci}"]`), rc = td.getBoundingClientRect();
+      td.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: rc.left + 5, clientY: rc.top + 5 }));
+      await sleep(50);
+      const cell = $$('#overlay .menu-item span:first-of-type').map(x => x.textContent);
+      $$('#overlay .menu-item').find(b => b.textContent.startsWith(`Filter: country = `)).click();
+      for (let i = 0; i < 40 && !tab.applied.length; i++) await sleep(50);
+      await sleep(200);
+      const allSame = tab.rows.every(r => r.vals[ci] === value);
+      const th = $(`#tabBody th[data-ci="${ci}"]`);
+      th.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 100 }));
+      await sleep(50);
+      const header = $$('#overlay .menu-item span:first-of-type').map(x => x.textContent);
+      document.querySelector('#overlay').innerHTML = '';
+      $('#sideList [data-ref]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 200 }));
+      await sleep(50);
+      const side = $$('#overlay .menu-item span:first-of-type').map(x => x.textContent);
+      document.querySelector('#overlay').innerHTML = '';
+      const filtered = tab.total;
+      tab.filters = [{ col: '*', op: 'contains', val: '' }]; tab.applied = []; await T.openTable({ name: 'players' });
+      const r = { cell, filtered, allSame, header, side };
+      r.ok = cell.includes('Copy value') && cell.includes('Copy row as INSERT') && cell.some(x => x.startsWith('Filter: country')) && allSame && filtered > 0 && filtered < 240
+        && header.includes('Sort descending') && side.includes('Open structure');
+      return r;
+    });
+  };
   // How long the page takes to follow a window resize: from the new size until it has painted at that size.
   const resizeTiming = async () => {
     await step('resize follows the window', async () => {
@@ -242,6 +273,7 @@
     await stopAndCap();
     await exports();
     await foreignKeys();
+    await contextMenus();
     await trellis.selftestLog('done');
     return trellis.selftestDone();
   }
@@ -285,6 +317,7 @@
   await stopAndCap();
   await exports();
   await foreignKeys();
+  await contextMenus();
   await step('blob cell', async () => { const t = T.newQueryTab("SELECT x'00ff' AS b, 9007199254740993 AS big, 1.5 AS f, NULL AS n"); T.runActive(); await sleep(300); return [...document.querySelectorAll('.grid tbody td')].map(td => td.textContent); });
 
   const pg = { name: 'Shop — staging', engine: 'postgres', env: 'staging', host: '127.0.0.1', port: 55432, user: 'postgres', password: 'strata', database: 'shop', sslMode: 'prefer' };
