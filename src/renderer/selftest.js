@@ -2,6 +2,7 @@
 // and writes one line per step to <dir>/log.txt, then quits. Postgres and MySQL come from the test containers.
 (async () => {
   const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const T = window.__trellis;
   const step = async (name, fn) => {
@@ -36,16 +37,18 @@
     phase('');
     await step('welcome lists connections', async () => [...document.querySelectorAll('.wl-row .cc-name')].map(x => x.innerText.replace(/\s+/g, ' ')));
     await step('welcome shows the build', async () => [$('#wlVersion').textContent, $('#wlDev').textContent]);
-    await step('new connection form', async () => {
-      $('.wl-action[data-wl="new"]').click(); await sleep(150);
-      const t = $('.sheet-title').textContent;
-      // In the short welcome window the buttons must stay on screen and the fields scroll.
-      const save = $('[data-cf="save"]').getBoundingClientRect(), body = $('.sheet-body');
-      const fits = save.bottom <= innerHeight && save.top >= 0;
+    // In the short welcome window a form's buttons must sit fully inside it, and its fields must scroll.
+    const formFits = async () => {
+      await sleep(250);
+      const sheet = $('.sheet').getBoundingClientRect(), save = $('[data-cf="save"]').getBoundingClientRect(), body = $('.sheet-body');
+      const inside = save.top >= sheet.top && save.bottom <= sheet.bottom - 4 && sheet.bottom <= innerHeight;
       const scrolls = body.scrollHeight <= body.clientHeight || (body.scrollTop = 999, body.scrollTop > 0);
+      const title = $('.sheet-title').textContent;
       $('[data-cf="cancel"]').click();
-      return { title: t, saveVisible: fits, fieldsScroll: scrolls };
-    });
+      return { title, buttonsInside: inside, fieldsScroll: scrolls, ok: inside && scrolls };
+    };
+    await step('new connection form', async () => { $('.wl-action[data-wl="new"]').click(); return formFits(); });
+    await step('sqlite connection form', async () => { const i = T.W.list.findIndex(c => c.engine === 'sqlite'); $$('.wl-row [data-edit]')[i].click(); return formFits(); });
     await lights('welcome', '.wl-bar');
     await trellis.selftestLog(`windows at launch: ${JSON.stringify(await trellis.debugWindows())}`);
     await T.connectTo('example');

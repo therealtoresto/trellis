@@ -1322,5 +1322,7 @@ html.mac .start-bar { padding-left: 86px; }
 
 /* Sheets fit short windows: the scrim keeps a small margin, and a form's middle scrolls under fixed buttons. */
 .scrim { padding: clamp(16px, 8vh, 96px) 16px 16px; }
-.sheet, .modal { max-height: 100%; }
-.sheet-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 2px; }
+.sheet, .modal { max-height: calc(100vh - clamp(16px, 8vh, 96px) - 16px); }
+/* WebKit does not shrink a flex child under a max-height parent, so the scrolling middle gets its own limit:
+   the window less the scrim's margins, the title (52px) and the button row (60px). */
+.sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 2px; max-height: calc(100vh - clamp(16px, 8vh, 96px) - 16px - 112px); }
