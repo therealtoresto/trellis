@@ -1,24 +1,39 @@
-# Builds Trellis for Ubuntu (.deb, .AppImage) and macOS (.app). Every push to main keeps the files as workflow
-# artifacts; a tag such as v0.3.0 also puts them on a draft GitHub release, to publish by hand.
+# Builds Trellis for Ubuntu (.deb, .AppImage) and macOS (.app) on every push to main. Each build is its own version,
+# 0.2.<commit count> (scripts/version.sh); when both builds pass, the commit gets the tag v<version> and a GitHub
+# release with the files attached.
 name: Build
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  linux:
-    name: Ubuntu
-    runs-on: ubuntu-22.04
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # the build number is the commit count
+          fetch-depth: 0 # the patch number is the commit count
+      - id: v
+        run: echo "version=$(scripts/version.sh)" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: Ubuntu
+    needs: version
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: System libraries
         run: |
@@ -39,8 +54,8 @@ jobs:
 
       - run: npm ci
 
-      - name: Build
-        run: ./node_modules/.bin/tauri build --bundles deb appimage
+      - name: Build ${{ env.VERSION }}
+        run: ./node_modules/.bin/tauri build --bundles deb appimage --config "{\"version\":\"$VERSION\"}"
 
       - name: Driver tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --release
@@ -52,6 +67,7 @@ jobs:
           TRELLIS_SELFTEST="$PWD/smoke" TRELLIS_SELFTEST_ONLY=grid TRELLIS_USERDATA="$(mktemp -d)" \
             timeout 180 xvfb-run -a src-tauri/target/release/trellis || true
           cat smoke/log.txt
+          grep -q "^welcome shows the build: \[\"Version $VERSION\"" smoke/log.txt
           grep -q '^workspace opened on Example' smoke/log.txt
           grep -q '^large result: {"ok":true' smoke/log.txt
           grep -q '^done' smoke/log.txt
@@ -63,18 +79,12 @@ jobs:
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/appimage/*.AppImage
 
-      - name: Draft release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          files: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
-
   macos:
     name: macOS
+    needs: version
     runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,22 +103,40 @@ jobs:
 
       - run: npm ci
 
-      - name: Build
-        run: ./node_modules/.bin/tauri build --bundles app
+      - name: Build ${{ env.VERSION }}
+        run: ./node_modules/.bin/tauri build --bundles app --config "{\"version\":\"$VERSION\"}"
 
       - name: Zip the app
         run: |
           cd src-tauri/target/release/bundle/macos
-          ditto -c -k --keepParent Trellis.app "$GITHUB_WORKSPACE/Trellis-macos-arm64.zip"
+          ditto -c -k --keepParent Trellis.app "$GITHUB_WORKSPACE/Trellis_${VERSION}_macos_arm64.zip"
 
       - uses: actions/upload-artifact@v4
         with:
           name: trellis-macos
-          path: Trellis-macos-arm64.zip
+          path: Trellis_*_macos_arm64.zip
 
-      - name: Draft release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  release:
+    name: Tag and release
+    needs: [version, linux, macos]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          draft: true
-          files: Trellis-macos-arm64.zip
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Trellis ${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          make_latest: true
+          files: |
+            dist/**/*.deb
+            dist/**/*.AppImage
+            dist/*.zip

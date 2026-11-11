@@ -32,21 +32,19 @@ their passwords: type each password once.
 
 ## Install
 
-GitHub Actions builds Trellis for Ubuntu and macOS on every push to `main`: open the latest
-[Build run](https://github.com/therealtoresto/trellis/actions/workflows/build.yml) and download `trellis-ubuntu` or
-`trellis-macos` under Artifacts (needs a GitHub login). Tagged versions also land on
-[Releases](https://github.com/therealtoresto/trellis/releases).
+Download the latest version from [Releases](https://github.com/therealtoresto/trellis/releases/latest): every push to
+`main` that builds and passes its tests on Ubuntu and macOS becomes a release of its own.
 
 **Ubuntu 22.04 or newer** (x86-64):
 
 ```sh
-sudo apt install ./Trellis_0.2.0_amd64.deb
+sudo apt install ./Trellis_*_amd64.deb
 ```
 
 Or run the AppImage without installing: `chmod +x Trellis_*.AppImage && ./Trellis_*.AppImage`. Passwords go to the
 Secret Service (GNOME Keyring on Ubuntu). Closing the last window quits Trellis on Linux.
 
-**macOS** (Apple silicon): unzip `Trellis-macos-arm64.zip` and move `Trellis.app` to Applications. The build is not
+**macOS** (Apple silicon): unzip `Trellis_*_macos_arm64.zip` and move `Trellis.app` to Applications. The build is not
 signed, so the first launch needs right-click → Open, or `xattr -dr com.apple.quarantine /Applications/Trellis.app`.
 
 ### Building on Ubuntu
@@ -58,14 +56,13 @@ npm ci
 ./node_modules/.bin/tauri build --bundles deb appimage   # → src-tauri/target/release/bundle/{deb,appimage}
 ```
 
-### Releasing
+### Versions and releases
 
-Bump `version` in `package.json` and `src-tauri/tauri.conf.json`, then push a tag; the workflow attaches the builds to a
-draft release, which you publish on GitHub.
-
-```sh
-git tag v0.3.0 && git push origin v0.3.0
-```
+A build's version is `major.minor` from `src-tauri/Cargo.toml` and the number of commits as the patch, so each commit
+is its own version: `0.2.17`, `0.2.18`… (`scripts/version.sh` prints it; the welcome window shows it). After both
+builds of a push to `main` pass, [the workflow](.github/workflows/build.yml) tags the commit `v<version>` and publishes
+a release with the `.deb`, the `.AppImage` and the zipped macOS app, its notes listing the commits since the last one.
+For a new minor version, change `version` in `src-tauri/Cargo.toml` (say to `0.3.0`); builds then count on as `0.3.N`.
 
 ## Build and run
 
