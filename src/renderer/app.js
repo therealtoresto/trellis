@@ -337,7 +337,7 @@ function renderDisconnected() {
   $('#sideList').innerHTML = '<div class="side-empty">Open a connection to see its tables.</div>';
   $('#sideFoot').innerHTML = '';
   $('#tabs').innerHTML = '';
-  $('#tabBody').innerHTML = `<div class="boot"><div>${ic('trellis')}<p>Trellis is not connected to a database yet.</p><div style="display:flex;gap:8px;justify-content:center"><button class="btn big" data-act="new-connection">${ic('plus')}New connection</button><button class="btn primary big" data-act="open-connection">${ic('plug')}Open connection</button></div></div></div>`;
+  $('#tabBody').innerHTML = `<div class="boot"><div><span class="brand-mark boot-mark" aria-hidden="true">${ic('trellis')}</span><p class="boot-title">No database open</p><p class="boot-sub">Open a saved connection or add a new one.</p><div style="display:flex;gap:8px;justify-content:center"><button class="btn big" data-act="new-connection">${ic('plus')}New connection</button><button class="btn primary big" data-act="open-connection">${ic('plug')}Open connection</button></div></div></div>`;
   $('#inspector').hidden = true;
   $('#layout').classList.add('no-inspector');
   $('#status').innerHTML = '<span>Not connected</span>';
@@ -983,7 +983,7 @@ function renderBody() {
   const tab = cur();
   body.style.animation = 'none'; void body.offsetWidth; body.style.animation = '';
   if (!tab) {
-    body.innerHTML = `<div class="boot"><div>${ic('trellis')}<p>Pick a table on the left, or start a query.</p><button class="btn primary" data-act="new-query">${ic('code')}New query</button></div></div>`;
+    body.innerHTML = `<div class="boot"><div><span class="brand-mark boot-mark" aria-hidden="true">${ic('trellis')}</span><p class="boot-title">Nothing open</p><p class="boot-sub">Pick a table on the left, or start a query (${MOD}T).</p><button class="btn primary big" data-act="new-query">${ic('code')}New query</button></div></div>`;
     return;
   }
   if (tab.kind === 'query') return renderQueryTab(tab);

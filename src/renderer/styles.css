@@ -922,6 +922,11 @@ kbd {
 }
 
 .boot { flex: 1; display: grid; place-items: center; color: var(--muted); gap: 10px; text-align: center; }
+/* The not-connected state: the app mark, large, above the two ways in. */
+.boot-mark { width: 64px; height: 64px; border-radius: 18px; margin: 0 auto 16px; box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 10px 28px rgba(75, 141, 255, 0.35); }
+.boot-mark .icon { width: 36px; height: 36px; }
+.boot-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--fg); }
+.boot-sub { margin: 4px 0 18px; font-size: 13px; }
 .spinner { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: spin .8s linear infinite; margin: 0 auto 10px; }
 
 .mobile-only { display: none; }
