@@ -172,7 +172,7 @@
       T.runActive();
       for (let i = 0; i < 100 && !T.cur().result; i++) await sleep(100);
       const r = { rows: T.cur().result && T.cur().result.values.length, msg: $('#qmsg').textContent };
-      r.ok = r.rows === 50000 && /the first 50,000 only/.test(r.msg);
+      r.ok = r.rows === 50000 && /the first 50\D?000 only/.test(r.msg);
       return r;
     });
   };
