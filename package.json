@@ -1,7 +1,7 @@
 {
   "name": "trellis",
   "productName": "Trellis",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A database client for macOS: SQLite, PostgreSQL and MySQL. Rust (Tauri 2) with an HTML window.",
   "repository": {
     "type": "git",
