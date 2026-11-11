@@ -8,6 +8,18 @@ REPO=https://github.com/therealtoresto/trellis/releases/latest/download
 KEY=/usr/share/keyrings/trellis.gpg
 LIST=/etc/apt/sources.list.d/trellis.list
 
+if ! command -v dpkg > /dev/null || ! command -v apt-get > /dev/null; then
+  if [ "$(uname)" = Darwin ]; then
+    echo "This installs Trellis on Ubuntu, Kubuntu or Debian. On a Mac use Homebrew:"
+    echo "  brew tap therealtoresto/trellis https://github.com/therealtoresto/trellis"
+    echo "  brew trust therealtoresto/trellis"
+    echo "  brew install --cask trellis"
+  else
+    echo "This installs Trellis on Ubuntu, Kubuntu or Debian (it needs apt and dpkg)."
+    echo "Elsewhere, run the AppImage: https://github.com/therealtoresto/trellis/releases/latest"
+  fi
+  exit 1
+fi
 [ "$(dpkg --print-architecture)" = amd64 ] || { echo "Trellis is built for x86-64 (amd64) only."; exit 1; }
 SUDO=$([ "$(id -u)" = 0 ] && echo "" || echo sudo)
 
