@@ -24,8 +24,10 @@ Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScr
 - **Structure** — columns, indexes, foreign keys and the definition (`⌘2`).
 - **SQL** — highlighting, autocomplete (`table.` lists its columns, `schema.` its tables). `⌘↵` runs the selection or
   the statement at the caret (a faint band marks it when the editor holds several), `⌘⇧↵` runs them all, `⌘.` stops a
-  running query on any engine. A result keeps its first 50,000 rows. Results copy as CSV. `⌘S` saves the tab to a
+  running query on any engine. A result keeps its first 50,000 rows. `⌘S` saves the tab to a
   `.sql` file (`~/Documents/Trellis Queries` by default), `⌘O` opens one.
+- **Export** (`⌘⇧E`) — copy a page or a result as CSV or JSON, or save it to a file: a query result as CSV or JSON,
+  a whole table (as filtered and sorted) as CSV, JSON or SQL `INSERT`s, read and written 5,000 rows at a time.
 - **Sidebar panes** — Items, saved Queries and the History of every query and commit, per connection.
 - **Inspector** — every field of the selected row; edit, set NULL, copy as JSON or INSERT (`⌘I`).
 - **JSON and arrays** — JSON values (`json`, `jsonb`, or JSON kept in a text column) are coloured in the grid and

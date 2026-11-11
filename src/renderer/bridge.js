@@ -30,6 +30,8 @@
     readSql: path => call('file_read_sql', { path }),
     saveSql: ({ file, text, name, saveAs }) => call('file_save_sql', { file: file || null, text, name: name || null, saveAs: !!saveAs }),
     reveal: path => call('file_reveal', { path }),
+    exportPath: (name, ext) => call('file_export_path', { name, ext }),
+    writeExport: (path, text, append) => call('file_write_export', { path, text, append: !!append }),
     newWindow: connectId => call('window_new', { connectId: connectId || null }),
     copy: text => call('clipboard_write', { text }),
     info: () => call('app_info'),

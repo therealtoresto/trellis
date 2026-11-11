@@ -1164,6 +1164,7 @@ function renderFoot(tab) {
     ${edit ? `<button class="btn" data-act="add-row" title="Insert a new row (${MOD}⇧N)">${ic('rowplus')}<span class="lbl">Row</span></button>
     <button class="btn danger" data-act="del-row" ${selRow ? '' : 'disabled'} title="Mark the selected row for deletion (${MOD}⌫)">${ic('trash')}<span class="lbl">${selRow && selRow.cls === 'is-del' ? 'Restore' : 'Delete'}</span></button>` : `<span class="readonly-chip">${why}</span>`}
     <span class="spacer"></span>
+    <button class="btn" data-act="export" title="Copy the page or save the table (${MOD}⇧E)">${ic('download')}<span class="lbl">Export</span></button>
     <div class="pager">
       <span>${from.toLocaleString()}–${to.toLocaleString()} of ${tab.approximate ? '~' : ''}${tab.total.toLocaleString()}</span>
       <button class="icon-btn" data-act="page-prev" ${tab.page ? '' : 'disabled'} aria-label="Previous page">${ic('left')}</button>
@@ -1225,7 +1226,7 @@ function renderQueryTab(tab) {
       <button class="btn primary" data-act="run" id="runBtn"></button>
       <span class="q-msg" id="qmsg"></span>
       <span class="spacer"></span>
-      <button class="btn" data-act="copy-csv" title="Copy the result as CSV">${ic('copy')}<span class="lbl">CSV</span></button>
+      <button class="btn" data-act="export" title="Copy or save the result (${MOD}⇧E)">${ic('download')}<span class="lbl">Export</span></button>
     </div>
     <div class="grid-wrap" tabindex="0" aria-label="Query result"></div>`;
   const ta = $('textarea', body);
@@ -1668,6 +1669,86 @@ const csvCell = v => v === null || v === undefined ? '' : /[",\n]/.test(shown(v)
 const sqlLit = v => v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : typeof v === 'boolean' ? String(v).toUpperCase() : "'" + shown(v).replace(/'/g, "''") + "'";
 const qid = n => S.info && /MySQL|MariaDB/.test(S.info.engine) ? '`' + n.replace(/`/g, '``') + '`' : '"' + n.replace(/"/g, '""') + '"';
 
+/* ---------- export ---------- */
+// Values as files want them: numbers in full (the grid rounds), JSON as JSON, binary data left out.
+const exportText = v => v === null || v === undefined || blobLen(v) !== null ? null : typeof v === 'number' ? String(v) : String(v);
+const exportCsv = v => { const s = exportText(v); return s === null ? '' : /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+function exportJsonValue(v, col) {
+  if (v === null || v === undefined || blobLen(v) !== null) return null;
+  const st = structured(v, col);
+  return st && st.json && !st.json.some(t => /^-?\d{16,}/.test(t)) ? JSON.parse(v) : v;
+}
+const exportSql = v => v === null || v === undefined || blobLen(v) !== null ? 'NULL' : typeof v === 'number' ? String(v) : typeof v === 'boolean' ? String(v).toUpperCase() : "'" + String(v).replace(/'/g, "''") + "'";
+
+const EXPORT_FORMATS = {
+  csv: { label: 'CSV', head: cols => cols.map(c => exportCsv(c.name)).join(',') + '\n', row: (vals) => vals.map(exportCsv).join(',') + '\n', tail: () => '' },
+  json: { label: 'JSON', head: () => '[', row: (vals, cols, first) => (first ? '\n  ' : ',\n  ') + JSON.stringify(Object.fromEntries(cols.map((c, i) => [c.name, exportJsonValue(vals[i], c)]))), tail: n => n ? '\n]\n' : ']\n' },
+  sql: { label: 'SQL', head: () => '', row: (vals, cols, first, table) => `INSERT INTO ${table} (${cols.map(c => qid(c.name)).join(', ')}) VALUES (${vals.map(exportSql).join(', ')});\n`, tail: () => '' },
+};
+
+/* Saves a query result, or a whole table as filtered and sorted, to a file. Tables are read 5,000 rows at a time
+   and written as they come, so a large one never sits in memory. */
+async function exportTab(tab, fmt) {
+  const f = EXPORT_FORMATS[fmt];
+  const isTable = tab.kind === 'table';
+  if (!isTable && !(tab.result && tab.model)) return toast('Run a query first', true);
+  const path = await api.exportPath(tab.name, fmt).catch(e => { toast(e.message, true); return null; });
+  if (!path) return;
+  const table = isTable ? `${tab.ref.schema ? qid(tab.ref.schema) + '.' : ''}${qid(tab.ref.name)}` : qid(tab.name.replace(/\W+/g, '_'));
+  let n = 0, cols = isTable ? tab.cols : tab.model.cols;
+  const chunk = (rows, append) => {
+    let s = append ? '' : f.head(cols);
+    for (const vals of rows) { s += f.row(vals, cols, n === 0, table); n++; }
+    return api.writeExport(path, s, append);
+  };
+  try {
+    if (!isTable) await chunk(tab.model.rows.map(r => r.vals), false);
+    else {
+      const sort = tab.sort && tab.cols[tab.sort.ci] ? { col: tab.cols[tab.sort.ci].name, dir: tab.sort.dir } : null;
+      const size = 5000;
+      for (let offset = 0; ; offset += size) {
+        const r = await api.page(tab.ref, { filters: tab.applied, sort, limit: size, offset });
+        cols = r.columns;
+        await chunk(r.rows.map(x => x.vals), offset > 0);
+        if (r.rows.length < size) break;
+        toast(`Exporting… ${n.toLocaleString()} rows`);
+      }
+    }
+    await api.writeExport(path, f.tail(n), true);
+    toast(`Exported ${plural(n, 'row')} to ${path.split('/').pop()}`);
+  } catch (e) { toast(`Export failed: ${e.message}`, true); }
+}
+
+// The Export menu under its button: copy what is on screen, or save it all as CSV, JSON or SQL.
+function exportMenu(anchor) {
+  const tab = cur();
+  if (!tab || (tab.kind === 'table' && tab.view !== 'data')) return;
+  const rows = tab.model ? tab.model.rows : [];
+  const cols = tab.model ? tab.model.cols : [];
+  const what = tab.kind === 'table' ? 'page' : 'result';
+  popMenu(anchor || $('[data-act="export"]'), [
+    { label: `Copy ${what} as CSV`, icon: 'copy', run: () => copy([cols.map(c => exportCsv(c.name)).join(','), ...rows.map(r => r.vals.map(exportCsv).join(','))].join('\n'), `Copied ${plural(rows.length, 'row')} as CSV`) },
+    { label: `Copy ${what} as JSON`, icon: 'copy', run: () => copy(JSON.stringify(rows.map(r => Object.fromEntries(cols.map((c, i) => [c.name, exportJsonValue(r.vals[i], c)]))), null, 2), `Copied ${plural(rows.length, 'row')} as JSON`) },
+    'sep',
+    { label: tab.kind === 'table' ? `Save ${tab.applied && tab.applied.length ? 'filtered ' : ''}table as CSV…` : 'Save as CSV…', icon: 'download', run: () => exportTab(tab, 'csv') },
+    { label: tab.kind === 'table' ? 'Save table as JSON…' : 'Save as JSON…', icon: 'download', run: () => exportTab(tab, 'json') },
+    ...(tab.kind === 'table' ? [{ label: 'Save table as SQL INSERTs…', icon: 'download', run: () => exportTab(tab, 'sql') }] : []),
+  ]);
+}
+
+// A small menu below `anchor`; items are {label, icon, sub, run, danger} or 'sep'.
+function popMenu(anchor, items) {
+  const ov = $('#overlay');
+  const r = anchor ? anchor.getBoundingClientRect() : { left: innerWidth / 2 - 120, right: innerWidth / 2 + 120, top: innerHeight / 3, bottom: innerHeight / 3 };
+  const h = items.length * 30 + 12;
+  const top = r.bottom + 6 + h > innerHeight ? Math.max(8, r.top - 6 - h) : r.bottom + 6;
+  ov.innerHTML = `<div class="scrim" data-scrim style="background:transparent;animation:none"></div><div class="menu glass-strong" role="menu" style="top:${top}px;left:${Math.max(8, Math.min(r.left, innerWidth - 268))}px;min-width:240px">
+    ${items.map((it, i) => it === 'sep' ? '<div class="menu-sep"></div>' : `<button class="menu-item${it.danger ? ' danger' : ''}" data-pm="${i}" role="menuitem">${it.icon ? ic(it.icon) : ''}<span>${esc(it.label)}</span>${it.sub ? `<span class="mi-sub">${esc(it.sub)}</span>` : ''}</button>`).join('')}
+  </div>`;
+  $('[data-scrim]', ov).addEventListener('mousedown', closeOverlay);
+  $$('[data-pm]', ov).forEach(b => b.addEventListener('click', () => { closeOverlay(); items[+b.dataset.pm].run(); }));
+}
+
 /* ---------- overlays ---------- */
 let toastTimer;
 function toast(msg, bad = false) {
@@ -1923,11 +2004,7 @@ function wireWorkspace() {
       if (a === 'filter-apply') return applyFilters(tab);
       if (a === 'filter-clear') { tab.filters = [{ col: '*', op: 'contains', val: '' }]; renderFilters(tab); return applyFilters(tab, false); }
       if (a === 'copy-ddl') return copy(tab.structure?.ddl || '', 'Definition copied');
-      if (a === 'copy-csv') {
-        if (!tab.model) return toast('Run a query first', true);
-        const csv = [tab.model.cols.map(c => csvCell(c.name)).join(','), ...tab.model.rows.map(r => r.vals.map(csvCell).join(','))].join('\n');
-        return copy(csv, `Copied ${plural(tab.model.rows.length, 'row')} as CSV`);
-      }
+      if (a === 'export') return exportMenu(act);
     }
     const v = e.target.closest('[data-view]');
     if (v && tab) return setView(v.dataset.view);
@@ -2088,6 +2165,7 @@ function onMenu(action) {
     case 'schemas': return showPalette(true);
     case 'run': return runActive();
     case 'run-all': return runActive(true);
+    case 'export': return exportMenu();
     case 'stop': return tab && stopQuery(tab);
     case 'commit': return reviewChanges();
     case 'discard': return discard();
@@ -2271,7 +2349,7 @@ async function boot() {
   if (connect) await connectTo(connect);
   else await showOpenConnection();
   if (info.selftest) { const sc = document.createElement('script'); sc.src = 'selftest.js'; document.body.appendChild(sc); }
-  window.__trellis = { S, stopQuery, connectTo, openTable, newQueryTab, runActive, reviewChanges, showPalette, selectCell, startEdit, stageEdit, refreshGrid, cur, setSchema, setPane, saveQuery, openQueryText, openManager, showConnMenu, showOpenConnection, showConnForm, blankForm };
+  window.__trellis = { S, stopQuery, exportTab, connectTo, openTable, newQueryTab, runActive, reviewChanges, showPalette, selectCell, startEdit, stageEdit, refreshGrid, cur, setSchema, setPane, saveQuery, openQueryText, openManager, showConnMenu, showOpenConnection, showConnForm, blankForm };
 }
 
 boot();

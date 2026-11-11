@@ -216,6 +216,32 @@ async fn file_save_sql(app: AppHandle, file: Option<String>, text: String, name:
     Ok(Some(target))
 }
 
+/// Files the window may write: only those the person picked in an export dialog.
+static EXPORTS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Asks where to save an export, offering `name.ext` in Downloads.
+#[tauri::command]
+async fn file_export_path(app: AppHandle, name: String, ext: String) -> R<Option<String>> {
+    let clean: String = name.chars().map(|c| if "\\/:*?\"<>|".contains(c) { '-' } else { c }).collect();
+    let dir = app.path().download_dir().or_else(|_| app.path().document_dir()).unwrap_or_default();
+    let picked = app.dialog().file().set_title("Export").add_filter(ext.to_uppercase(), &[ext.as_str()]).set_file_name(format!("{clean}.{ext}")).set_directory(dir).blocking_save_file();
+    let Some(p) = picked else { return Ok(None) };
+    let path = path_of(p)?;
+    EXPORTS.lock().unwrap().push(path.clone());
+    Ok(Some(path))
+}
+
+/// Writes (or, with `append`, adds to) an export file picked through [`file_export_path`].
+#[tauri::command]
+async fn file_write_export(path: String, text: String, append: bool) -> R<()> {
+    use std::io::Write;
+    if !EXPORTS.lock().unwrap().contains(&path) {
+        return Err("Pick the file to export to first.".into());
+    }
+    let mut f = std::fs::OpenOptions::new().create(true).write(true).append(append).truncate(!append).open(&path).map_err(|e| format!("Could not write {path}: {e}"))?;
+    f.write_all(text.as_bytes()).map_err(|e| format!("Could not write {path}: {e}"))
+}
+
 #[tauri::command]
 async fn file_reveal(app: AppHandle, path: String) -> R<()> {
     app.opener().reveal_item_in_dir(path).map_err(err)
@@ -461,6 +487,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &it("open-sql", "Open SQL File…", Some("CmdOrCtrl+O"))?,
             &it("save", "Save", Some("CmdOrCtrl+S"))?,
             &it("save-as", "Save As…", Some("CmdOrCtrl+Shift+S"))?,
+            &it("export", "Export…", Some("CmdOrCtrl+Shift+E"))?,
             &PredefinedMenuItem::separator(app)?,
             &it("new-connection", "New Connection…", None)?,
             &it("connections", "Open Connection…", Some("CmdOrCtrl+Shift+K"))?,
@@ -596,7 +623,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             conns_list, conns_save, conns_delete, conns_test,
             db_connect, db_disconnect, db_objects, db_set_schema, db_all_columns, db_structure, db_page, db_query, db_cancel, db_preview, db_apply,
-            demo_reset, dialog_open_sqlite, dialog_new_sqlite, file_open_sql, file_read_sql, file_save_sql, file_reveal,
+            demo_reset, dialog_open_sqlite, dialog_new_sqlite, file_open_sql, file_read_sql, file_save_sql, file_reveal, file_export_path, file_write_export,
             clipboard_write, window_new, app_info, selftest_log, selftest_done, debug_traffic_lights, selftest_resize, about_info, open_connection_window, show_welcome, debug_windows, place_lights,
             update_check, update_install,
         ])

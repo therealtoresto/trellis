@@ -167,6 +167,30 @@
       return r;
     });
   };
+  // Export writes whole tables in pieces and query results at once; the file dialog and the disk are stood in for.
+  const exports = async () => {
+    await step('export a table and a result', async () => {
+      const real = { path: trellis.exportPath, write: trellis.writeExport };
+      const files = {};
+      trellis.exportPath = async (name, ext) => `/tmp/${name}.${ext}`;
+      trellis.writeExport = async (path, text, append) => { files[path] = (append ? files[path] || '' : '') + text; };
+      try {
+        await T.openTable({ name: 'players' }); await sleep(400);
+        const total = T.cur().total;
+        for (const f of ['csv', 'json', 'sql']) await T.exportTab(T.cur(), f);
+        T.newQueryTab("SELECT 1 AS n, 'a,b' AS s, json_object('k', 1) AS j, 1.23456789 AS x"); T.runActive();
+        for (let i = 0; i < 50 && !T.cur().result; i++) await sleep(100);
+        await T.exportTab(T.cur(), 'csv'); await T.exportTab(T.cur(), 'json');
+        const csv = files['/tmp/players.csv'].trimEnd().split('\n'), json = JSON.parse(files['/tmp/players.json']);
+        const sql = files['/tmp/players.sql'].trimEnd().split('\n');
+        const q = T.cur().name;
+        const r = { total, csvLines: csv.length, header: csv[0].slice(0, 60), json: json.length, sql: sql.length, sqlFirst: sql[0].slice(0, 80), qcsv: files[`/tmp/${q}.csv`], qjson: JSON.parse(files[`/tmp/${q}.json`]) };
+        r.ok = csv.length === total + 1 && json.length === total && sql.length === total && /^INSERT INTO "players"/.test(sql[0])
+          && r.qcsv === 'n,s,j,x\n1,"a,b","{""k"":1}",1.23456789\n' && r.qjson[0].j.k === 1 && r.qjson[0].x === 1.23456789;
+        return r;
+      } finally { trellis.exportPath = real.path; trellis.writeExport = real.write; }
+    });
+  };
   // How long the page takes to follow a window resize: from the new size until it has painted at that size.
   const resizeTiming = async () => {
     await step('resize follows the window', async () => {
@@ -194,6 +218,7 @@
     await bigGrid();
     await jsonCells();
     await stopAndCap();
+    await exports();
     await trellis.selftestLog('done');
     return trellis.selftestDone();
   }
@@ -235,6 +260,7 @@
   await bigGrid();
   await jsonCells();
   await stopAndCap();
+  await exports();
   await step('blob cell', async () => { const t = T.newQueryTab("SELECT x'00ff' AS b, 9007199254740993 AS big, 1.5 AS f, NULL AS n"); T.runActive(); await sleep(300); return [...document.querySelectorAll('.grid tbody td')].map(td => td.textContent); });
 
   const pg = { name: 'Shop — staging', engine: 'postgres', env: 'staging', host: '127.0.0.1', port: 55432, user: 'postgres', password: 'strata', database: 'shop', sslMode: 'prefer' };
