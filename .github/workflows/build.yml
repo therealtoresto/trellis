@@ -2,7 +2,8 @@
 # publishes the files as that GitHub release once both builds pass, with latest.json for the in-app updater. Run it by
 # hand from the Actions tab to get the files as workflow artifacts without a release.
 #
-# Secrets: TAURI_SIGNING_PRIVATE_KEY signs the update files (the app holds the public key in tauri.conf.json).
+# Secrets: TAURI_SIGNING_PRIVATE_KEY signs the update files (the app holds the public key in tauri.conf.json);
+# APT_GPG_KEY signs the apt repository published with each release.
 name: Build
 
 on:
@@ -37,7 +38,12 @@ jobs:
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is missing (see README, Releasing)"; exit 1
           fi
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ -z "$APT_GPG_KEY" ]; then
+            echo "::error::The APT_GPG_KEY secret is missing (see README, Releasing)"; exit 1
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
+        env:
+          APT_GPG_KEY: ${{ secrets.APT_GPG_KEY }}
 
   linux:
     name: Ubuntu
@@ -183,6 +189,27 @@ jobs:
           '
           cat dist/latest.json
 
+      # A flat apt repository among the release files, so releases/latest/download is always the newest one:
+      # Packages lists the .deb, Release has their checksums, signed as InRelease and Release.gpg.
+      - name: apt repository
+        env:
+          APT_GPG_KEY: ${{ secrets.APT_GPG_KEY }}
+        run: |
+          sudo apt-get install -y -qq dpkg-dev apt-utils >/dev/null
+          mkdir -p apt && cp $(find dist -name '*.deb') apt/
+          cd apt
+          dpkg-scanpackages --multiversion . /dev/null > Packages
+          gzip -9kf Packages
+          apt-ftparchive -o APT::FTPArchive::Release::Origin=Trellis -o APT::FTPArchive::Release::Label=Trellis \
+            -o APT::FTPArchive::Release::Architectures=amd64 release . > Release
+          export GNUPGHOME=$(mktemp -d)
+          echo "$APT_GPG_KEY" | gpg --batch --import
+          gpg --batch --yes --pinentry-mode loopback --passphrase '' --clearsign -o InRelease Release
+          gpg --batch --yes --pinentry-mode loopback --passphrase '' -abs -o Release.gpg Release
+          gpg --export > trellis.gpg
+          rm ./*.deb
+          cat Packages Release
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -195,3 +222,24 @@ jobs:
             dist/Trellis_macos_arm64.zip
             dist/Trellis_macos_arm64.app.tar.gz
             dist/latest.json
+            apt/Packages
+            apt/Packages.gz
+            apt/Release
+            apt/InRelease
+            apt/Release.gpg
+            apt/trellis.gpg
+
+  # Installs the release on a clean Ubuntu the way the README says, from the published files.
+  apt-install:
+    name: apt install
+    needs: [version, release]
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sleep 20 # releases/latest takes a moment to point at the new release
+          bash scripts/install-linux.sh
+          dpkg -s trellis | grep -q "^Version: $VERSION$"
+          which trellis

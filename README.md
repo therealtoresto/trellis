@@ -34,14 +34,24 @@ their passwords: type each password once.
 
 Download the latest version from [Releases](https://github.com/therealtoresto/trellis/releases/latest).
 
-**Ubuntu 22.04 or newer** (x86-64):
+**Ubuntu, Kubuntu or Debian** (22.04 / 12 or newer, x86-64), from the apt repository:
 
 ```sh
-sudo apt install ./Trellis_*_amd64.deb
+curl -fsSL https://raw.githubusercontent.com/therealtoresto/trellis/main/scripts/install-linux.sh | bash
 ```
 
-Or run the AppImage without installing: `chmod +x Trellis_*.AppImage && ./Trellis_*.AppImage`. Passwords go to the
-Secret Service (GNOME Keyring on Ubuntu). Closing the last window quits Trellis on Linux.
+[The script](scripts/install-linux.sh) adds the repository and its signing key, then runs `apt install trellis`; from
+then on `sudo apt upgrade` updates Trellis with the rest of the system. By hand, it is:
+
+```sh
+curl -fsSL https://github.com/therealtoresto/trellis/releases/latest/download/trellis.gpg | sudo tee /usr/share/keyrings/trellis.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/trellis.gpg] https://github.com/therealtoresto/trellis/releases/latest/download ./" | sudo tee /etc/apt/sources.list.d/trellis.list
+sudo apt update && sudo apt install trellis
+```
+
+Or download a file from the release: `sudo apt install ./Trellis_*_amd64.deb`, or the AppImage, which runs without
+installing (`chmod +x Trellis_*.AppImage && ./Trellis_*.AppImage`). Passwords go to the Secret Service (GNOME Keyring,
+or KWallet on KDE). Closing the last window quits Trellis on Linux.
 
 **macOS** (Apple silicon, macOS 11 or newer) with Homebrew:
 
@@ -82,6 +92,15 @@ macOS, opens the Ubuntu build on a virtual screen as a smoke test, and when both
 `.deb`, the `.AppImage` and the zipped macOS app, its notes listing the commits since the last one. The welcome window
 shows the version and the build number (the commit count), as in `Version 0.2.1 (18)`. To get the files without a
 release, run the Build workflow from the Actions tab: they appear under the run's Artifacts.
+
+Two signing keys live as repository secrets, with their backups outside the repository (`~/.config/trellis-release`
+on the maintainer's Mac): `TAURI_SIGNING_PRIVATE_KEY` for the in-app updates and `APT_GPG_KEY` for the apt repository.
+The workflow stops early when one is missing.
+
+The apt repository is part of every release: `Packages`, `Release`, its signatures `InRelease` and `Release.gpg`, and
+the public key `trellis.gpg`, next to the `.deb` they list. Since `releases/latest/download/` always points at the newest
+release, it works as the repository's address. After publishing, the workflow installs the release with
+`scripts/install-linux.sh` on a clean Ubuntu to check that this works.
 
 The update files are signed with a key of our own (minisign, not an Apple certificate). Its public half is
 `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`; the private half is the `TAURI_SIGNING_PRIVATE_KEY` repository
