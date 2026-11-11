@@ -2076,12 +2076,35 @@ function welcomeMenu(e, i) {
   }));
 }
 
+// A newer release shows as a button under the version; it downloads, installs and restarts Trellis.
+async function offerUpdate() {
+  const btn = $('#wlUpdate');
+  const up = await api.updateCheck().catch(() => null);
+  if (!btn || !up) return;
+  const idle = () => { btn.disabled = false; btn.innerHTML = `${ic('download')}Update to ${esc(up.version)}`; };
+  idle();
+  btn.title = up.notes ? up.notes.slice(0, 400) : `Trellis ${up.version} is out; you have ${up.current}.`;
+  btn.hidden = false;
+  const install = async () => {
+    btn.disabled = true;
+    btn.textContent = 'Downloading…';
+    const off = await api.onUpdateProgress(share => { btn.textContent = `Downloading ${Math.round(share * 100)}%`; if (share >= 1) btn.textContent = 'Installing…'; });
+    try { await api.updateInstall(); }
+    catch (e) { idle(); toast(`The update failed: ${e.message}`, true); }
+    finally { off(); }
+  };
+  btn.onclick = () => up.windows
+    ? showModal({ title: `Update to Trellis ${up.version}?`, text: `Trellis restarts to finish, which closes ${plural(up.windows, 'open database window')}. Uncommitted changes in them are lost.`, actions: [{ label: 'Later' }, { label: 'Update and Restart', primary: true, run: install }] })
+    : install();
+}
+
 async function wireWelcome() {
   const about = await api.about().catch(() => null);
   if (about) {
     $('#wlVersion').textContent = `Version ${about.version}${about.build ? ` (${about.build})` : ''}`;
     $('#wlDev').textContent = `© ${about.year} ${(about.developer || '').split(':')[0]} · ${about.license} License`;
   }
+  offerUpdate();
   const open = () => { const c = W.list[W.on]; if (c) connectTo(c.id); };
   $('#wlFilter').addEventListener('input', () => { W.on = 0; W.selId = null; renderWelcome(); });
   $('#wlFilter').addEventListener('keydown', e => {
@@ -2132,7 +2155,7 @@ async function boot() {
     });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlayOpen()) { e.preventDefault(); closeOverlay(); } });
     await wireWelcome();
-    window.__trellis = { S, W, connectTo, renderWelcome, showConnForm, blankForm };
+    window.__trellis = { S, W, connectTo, renderWelcome, showConnForm, blankForm, offerUpdate };
     if (info.selftest) { const sc = document.createElement('script'); sc.src = 'selftest.js'; document.body.appendChild(sc); }
     return;
   }

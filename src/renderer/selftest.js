@@ -37,6 +37,16 @@
     phase('');
     await step('welcome lists connections', async () => [...document.querySelectorAll('.wl-row .cc-name')].map(x => x.innerText.replace(/\s+/g, ' ')));
     await step('welcome shows the build', async () => [$('#wlVersion').textContent, $('#wlDev').textContent]);
+    await step('welcome offers an update', async () => {
+      // The real check is off in test builds; a pretend release shows where the button goes.
+      const real = trellis.updateCheck;
+      trellis.updateCheck = async () => ({ version: '9.9.9', current: '0.0.0', notes: '', windows: 0 });
+      await T.offerUpdate(); trellis.updateCheck = real;
+      const b = $('#wlUpdate'), r = b.getBoundingClientRect(), side = $('.wl-side').getBoundingClientRect();
+      const ok = !b.hidden && b.textContent === 'Update to 9.9.9' && r.left >= side.left && r.right <= side.right && r.height > 20;
+      b.hidden = true;
+      return { ok, text: b.textContent, box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] };
+    });
     // In the short welcome window a form's buttons must sit fully inside it, and its fields must scroll.
     const formFits = async () => {
       await sleep(250);

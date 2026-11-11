@@ -1,6 +1,8 @@
 # Builds Trellis for Ubuntu (.deb, .AppImage) and macOS (.app) when a release tag is pushed (npm run release), and
-# publishes the files as that GitHub release once both builds pass. Run it by hand from the Actions tab to get the
-# files as workflow artifacts without a release.
+# publishes the files as that GitHub release once both builds pass, with latest.json for the in-app updater. Run it by
+# hand from the Actions tab to get the files as workflow artifacts without a release.
+#
+# Secrets: TAURI_SIGNING_PRIVATE_KEY signs the update files (the app holds the public key in tauri.conf.json).
 name: Build
 
 on:
@@ -11,6 +13,12 @@ on:
 permissions:
   contents: write
 
+env:
+  # Builds here also make the signed files the in-app updater downloads.
+  UPDATER: '{"bundle":{"createUpdaterArtifacts":true}}'
+  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+
 jobs:
   version:
     name: Version
@@ -19,14 +27,15 @@ jobs:
       version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # the patch number is the commit count
       # The version lives in tauri.conf.json; a release tag must name the same one.
       - id: v
         run: |
           v=$(node -p "require('./src-tauri/tauri.conf.json').version")
           if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$v" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match version $v in tauri.conf.json"; exit 1
+          fi
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is missing (see README, Releasing)"; exit 1
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
@@ -39,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # the build number is the commit count
 
       - name: System libraries
         run: |
@@ -61,7 +70,11 @@ jobs:
       - run: npm ci
 
       - name: Build ${{ env.VERSION }}
-        run: ./node_modules/.bin/tauri build --bundles deb appimage
+        run: ./node_modules/.bin/tauri build --bundles deb appimage --config "$UPDATER"
+
+      # The updater installs a .deb too; sign it when the bundler did not.
+      - name: Sign the .deb
+        run: for f in src-tauri/target/release/bundle/deb/*.deb; do [ -f "$f.sig" ] || ./node_modules/.bin/tauri signer sign "$f"; done
 
       - name: Driver tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --release
@@ -76,6 +89,7 @@ jobs:
           grep -q "^welcome shows the build: \[\"Version $VERSION " smoke/log.txt
           grep -q '^workspace opened on Example' smoke/log.txt
           grep -q '^large result: {"ok":true' smoke/log.txt
+          grep -q '^json and arrays: {.*"ok":true}$' smoke/log.txt
           grep -q '^done' smoke/log.txt
 
       - uses: actions/upload-artifact@v4
@@ -83,7 +97,9 @@ jobs:
           name: trellis-ubuntu
           path: |
             src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/deb/*.deb.sig
             src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/appimage/*.AppImage.sig
 
   macos:
     name: macOS
@@ -110,17 +126,21 @@ jobs:
       - run: npm ci
 
       - name: Build ${{ env.VERSION }}
-        run: ./node_modules/.bin/tauri build --bundles app
+        run: ./node_modules/.bin/tauri build --bundles app --config "$UPDATER"
 
-      - name: Zip the app
+      # The zip is for people (and Homebrew) and keeps one name across releases, so
+      # releases/latest/download/Trellis_macos_arm64.zip is always the newest; the .tar.gz is for the updater.
+      - name: Package the app
         run: |
           cd src-tauri/target/release/bundle/macos
-          ditto -c -k --keepParent Trellis.app "$GITHUB_WORKSPACE/Trellis_${VERSION}_macos_arm64.zip"
+          ditto -c -k --keepParent Trellis.app "$GITHUB_WORKSPACE/Trellis_macos_arm64.zip"
+          cp Trellis.app.tar.gz "$GITHUB_WORKSPACE/Trellis_macos_arm64.app.tar.gz"
+          cp Trellis.app.tar.gz.sig "$GITHUB_WORKSPACE/Trellis_macos_arm64.app.tar.gz.sig"
 
       - uses: actions/upload-artifact@v4
         with:
           name: trellis-macos
-          path: Trellis_*_macos_arm64.zip
+          path: Trellis_macos_arm64.*
 
   release:
     name: Tag and release
@@ -130,10 +150,38 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
+      # What the in-app updater reads: the version, the commits since the last release and a signed file per platform.
+      - name: Update manifest
+        run: |
+          prev=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          git log --no-merges --pretty='- %s' ${prev:+$prev..}"$GITHUB_REF_NAME" | grep -v '\[RELEASE\]' | sed -E 's/^- \[[A-Z]+\] - /- /' > notes.txt || true
+          node -e '
+            const fs = require("fs"), path = require("path");
+            const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+            const files = walk("dist"), base = `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${process.env.GITHUB_REF_NAME}/`;
+            const entry = re => {
+              const f = files.find(x => re.test(x));
+              if (!f || !fs.existsSync(f + ".sig")) throw new Error(`no signed file for ${re}`);
+              return { url: base + path.basename(f), signature: fs.readFileSync(f + ".sig", "utf8").trim() };
+            };
+            const mac = entry(/macos_arm64\.app\.tar\.gz$/), appimage = entry(/\.AppImage$/), deb = entry(/\.deb$/);
+            fs.writeFileSync("dist/latest.json", JSON.stringify({
+              version: process.env.VERSION,
+              notes: fs.readFileSync("notes.txt", "utf8").trim(),
+              pub_date: new Date().toISOString(),
+              platforms: { "darwin-aarch64": mac, "darwin-aarch64-app": mac, "linux-x86_64": appimage, "linux-x86_64-appimage": appimage, "linux-x86_64-deb": deb },
+            }, null, 2));
+          '
+          cat dist/latest.json
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -144,4 +192,6 @@ jobs:
           files: |
             dist/**/*.deb
             dist/**/*.AppImage
-            dist/*.zip
+            dist/Trellis_macos_arm64.zip
+            dist/Trellis_macos_arm64.app.tar.gz
+            dist/latest.json

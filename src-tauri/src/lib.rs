@@ -242,6 +242,78 @@ fn about_info() -> Value {
     })
 }
 
+/* ---------- updates ---------- */
+
+/// Debug builds and self-tests never look for updates: they would replace a build that isn't a release.
+fn updates_enabled() -> bool {
+    !cfg!(debug_assertions) && std::env::var("TRELLIS_SELFTEST").is_err()
+}
+
+async fn find_update(app: &AppHandle) -> R<Option<tauri_plugin_updater::Update>> {
+    use tauri_plugin_updater::UpdaterExt;
+    app.updater().map_err(err)?.check().await.map_err(err)
+}
+
+/// Downloads the update, installs it over this copy and starts the new one. `progress` hears the share done, 0 to 1.
+async fn install_update(app: AppHandle, update: tauri_plugin_updater::Update, progress: impl Fn(f64) + Send + 'static) -> R<()> {
+    let mut got = 0usize;
+    update
+        .download_and_install(move |chunk, total| { got += chunk; if let Some(t) = total { progress(got as f64 / t as f64); } }, || {})
+        .await
+        .map_err(err)?;
+    QUITTING.store(true, Ordering::SeqCst);
+    app.restart()
+}
+
+/// The newer release on GitHub, if there is one, and how many database windows a restart would close.
+#[tauri::command]
+async fn update_check(app: AppHandle) -> R<Option<Value>> {
+    if !updates_enabled() {
+        return Ok(None);
+    }
+    let windows = app.webview_windows().keys().filter(|l| l.starts_with("trellis-")).count();
+    Ok(find_update(&app).await?.map(|u| json!({ "version": u.version, "current": u.current_version, "notes": u.body, "windows": windows })))
+}
+
+/// Installs the newer release and restarts; the window that asked hears the download as `update` events.
+#[tauri::command]
+async fn update_install(app: AppHandle, window: WebviewWindow) -> R<()> {
+    let update = find_update(&app).await?.ok_or_else(|| "Trellis is up to date.".to_string())?;
+    let (a, label) = (app.clone(), window.label().to_string());
+    install_update(app, update, move |share| { let _ = a.emit_to(label.as_str(), "update", share); }).await
+}
+
+/// Trellis → Check for Updates…: says so when there is nothing newer, and asks before installing.
+fn check_updates_from_menu(app: &AppHandle) {
+    use tauri_plugin_dialog::{MessageDialogButtons, MessageDialogKind};
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let found = if updates_enabled() { find_update(&app).await } else { Ok(None) };
+        let version = env!("CARGO_PKG_VERSION");
+        match found {
+            Ok(None) => app.dialog().message(format!("Trellis {version} is the latest version.")).title("You’re up to date").kind(MessageDialogKind::Info).show(|_| {}),
+            Err(e) => app.dialog().message(format!("Couldn’t reach GitHub to check for updates: {e}")).title("Check for Updates").kind(MessageDialogKind::Warning).show(|_| {}),
+            Ok(Some(u)) => {
+                let a = app.clone();
+                let notes = u.body.clone().filter(|b| !b.trim().is_empty()).map(|b| format!("\n\n{}", b.chars().take(600).collect::<String>())).unwrap_or_default();
+                app.dialog()
+                    .message(format!("Trellis {} is out; you have {version}. Installing it restarts Trellis and closes open windows.{notes}", u.version))
+                    .title("Update available")
+                    .buttons(MessageDialogButtons::OkCancelCustom("Update and Restart".into(), "Later".into()))
+                    .show(move |yes| {
+                        if yes {
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(e) = install_update(a.clone(), u, |_| {}).await {
+                                    a.dialog().message(format!("The update failed: {e}")).title("Update failed").kind(MessageDialogKind::Error).show(|_| {});
+                                }
+                            });
+                        }
+                    });
+            }
+        }
+    });
+}
+
 /// Opens a database in a workspace window and puts the welcome window away.
 #[tauri::command]
 async fn open_connection_window(app: AppHandle, id: String) -> R<()> {
@@ -448,6 +520,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         &[
             &PredefinedMenuItem::about(app, Some("About Trellis"), None)?,
+            &it("check-updates", "Check for Updates…", None)?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::hide(app, None)?,
             &PredefinedMenuItem::hide_others(app, None)?,
@@ -463,6 +536,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
             let dir = match std::env::var("TRELLIS_USERDATA") {
@@ -477,6 +551,7 @@ pub fn run() {
                 match id.as_str() {
                     "new-window" => { let _ = create_window(app, None); }
                     "welcome" => { let _ = create_welcome(app); }
+                    "check-updates" => check_updates_from_menu(app),
                     "close-window" => { if let Some(w) = focused(app) { let _ = w.close(); } }
                     _ => {
                         if let Some(w) = focused(app) {
@@ -509,6 +584,7 @@ pub fn run() {
             db_connect, db_disconnect, db_objects, db_set_schema, db_all_columns, db_structure, db_page, db_query, db_preview, db_apply,
             demo_reset, dialog_open_sqlite, dialog_new_sqlite, file_open_sql, file_read_sql, file_save_sql, file_reveal,
             clipboard_write, window_new, app_info, selftest_log, selftest_done, debug_traffic_lights, selftest_resize, about_info, open_connection_window, show_welcome, debug_windows, place_lights,
+            update_check, update_install,
         ])
         .build(tauri::generate_context!())
         .expect("Trellis failed to start")

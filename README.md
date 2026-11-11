@@ -46,6 +46,10 @@ Secret Service (GNOME Keyring on Ubuntu). Closing the last window quits Trellis 
 **macOS** (Apple silicon): unzip `Trellis_*_macos_arm64.zip` and move `Trellis.app` to Applications. The build is not
 signed, so the first launch needs right-click → Open, or `xattr -dr com.apple.quarantine /Applications/Trellis.app`.
 
+**Updates** come from inside the app: the welcome window shows an *Update to x.y.z* button when a newer release is
+out, and **Trellis → Check for Updates…** looks on demand. Either downloads the release, checks its signature,
+installs it over the running copy (the `.app`, the AppImage, or the `.deb` through a password prompt) and restarts.
+
 ### Building on Ubuntu
 
 ```sh
@@ -69,6 +73,12 @@ macOS, opens the Ubuntu build on a virtual screen as a smoke test, and when both
 `.deb`, the `.AppImage` and the zipped macOS app, its notes listing the commits since the last one. The welcome window
 shows the version and the build number (the commit count), as in `Version 0.2.1 (18)`. To get the files without a
 release, run the Build workflow from the Actions tab: they appear under the run's Artifacts.
+
+The update files are signed with a key of our own (minisign, not an Apple certificate). Its public half is
+`plugins.updater.pubkey` in `src-tauri/tauri.conf.json`; the private half is the `TAURI_SIGNING_PRIVATE_KEY` repository
+secret, kept with its backup outside the repository. Lose it and installed copies can no longer update themselves, so
+keep the backup. The release also carries `latest.json`, which the app reads from
+`releases/latest/download/latest.json` to learn about a new version.
 
 ## Build and run
 
