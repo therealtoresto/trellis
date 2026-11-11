@@ -91,6 +91,9 @@ function connSub(c) {
   return `${c.host || 'localhost'} : ${c.database || (c.engine === 'postgres' ? 'postgres' : 'all schemas')}`;
 }
 
+// A connection's avatar: its icon (or its engine's) on a disc in its status color.
+const avatar = c => `<span class="eng-badge ${c.engine}" style="--status:${esc(colorOf(c))}" title="${ENGINE[c.engine].label}">${connIcon(c.engine, c.icon)}</span>`;
+
 const envPill = c => `<span class="env-pill" data-env="${esc(c.env || 'local')}">${c.demo ? 'example' : esc(ENV[c.env || 'local'].toLowerCase())}</span>`;
 
 function sheetStatus(kind, text) {
@@ -126,7 +129,7 @@ async function showOpenConnection(selectId) {
     on = Math.min(on, Math.max(0, shownConns.length - 1));
     list.innerHTML = shownConns.length ? shownConns.map((c, i) => `
       <div class="oc-row${i === on ? ' on' : ''}${S.conn && S.conn.id === c.id ? ' current' : ''}" data-i="${i}" role="option" aria-selected="${i === on}">
-        <span class="eng-badge ${c.engine}" style="--status:${esc(colorOf(c))}">${ENGINE[c.engine].short}</span>
+        ${avatar(c)}
         <span class="cc-text"><span class="cc-name">${esc(c.name || 'Untitled')} ${envPill(c)}</span><span class="cc-sub">${esc(connSub(c))}</span></span>
         <button class="icon-btn oc-edit" data-edit="${i}" title="Edit connection" aria-label="Edit ${esc(c.name)}">${ic('pencil')}</button>
       </div>`).join('')
@@ -187,6 +190,8 @@ function showConnForm(form, fromList = false) {
         <div class="swatches">${COLORS.map(c => `<button class="swatch${f.color === c ? ' on' : ''}" data-color="${c}" style="--sw:${c}" aria-label="Color ${c}"></button>`).join('')}</div>
         <label class="cf-label inline" for="cf-env">Tag</label>${select('env', { local: 'local', dev: 'development', staging: 'staging', production: 'production' })}
       </div>
+      <span class="cf-label">Icon</span>
+      <div class="icon-pick" id="cfIcons" style="--status:${esc(f.color)}">${['auto', ...Object.keys(CONN_ICONS)].map(k => `<button class="icon-opt${(f.icon || 'auto') === k ? ' on' : ''}" data-iconpick="${k}" title="${k === 'auto' ? `${eng.label} (automatic)` : k}" aria-label="${k === 'auto' ? 'Engine icon' : k}">${connIcon(f.engine, k === 'auto' ? null : k)}</button>`).join('')}</div>
       <label class="cf-label" for="cf-safeMode">Safe mode</label><div class="cf-span">${select('safeMode', SAFE)}</div>
     </div>
     <div class="cf-box">
@@ -264,7 +269,9 @@ function showConnForm(form, fromList = false) {
       return showConnForm(f, fromList);
     }
     const sw = e.target.closest('[data-color]');
-    if (sw) { f.color = sw.dataset.color; $$('.swatch', sheet).forEach(x => x.classList.toggle('on', x === sw)); return; }
+    if (sw) { f.color = sw.dataset.color; $$('.swatch', sheet).forEach(x => x.classList.toggle('on', x === sw)); $('#cfIcons', sheet).style.setProperty('--status', f.color); return; }
+    const ip = e.target.closest('[data-iconpick]');
+    if (ip) { f.icon = ip.dataset.iconpick === 'auto' ? null : ip.dataset.iconpick; $$('.icon-opt', sheet).forEach(x => x.classList.toggle('on', x === ip)); return; }
     const b = e.target.closest('[data-cf]');
     if (b) run(b.dataset.cf);
   });
@@ -1472,7 +1479,7 @@ async function showConnMenu() {
   S.conns = await api.connections();
   const ov = $('#overlay');
   const r = $('#connBtn').getBoundingClientRect();
-  const row = c => `<button class="menu-conn${c.id === S.conn.id ? ' current' : ''}" data-conn="${esc(c.id)}" title="${esc(connSub(c))} — ${MOD}click opens a new window"><span class="eng-badge ${c.engine}">${ENGINE[c.engine].short}</span><span class="cc-text"><span class="cc-name">${esc(c.name)}</span><span class="cc-sub">${esc(connSub(c))}</span></span><span class="conn-dot" style="background:${esc(colorOf(c))}"></span></button>`;
+  const row = c => `<button class="menu-conn${c.id === S.conn.id ? ' current' : ''}" data-conn="${esc(c.id)}" title="${esc(connSub(c))} — ${MOD}click opens a new window">${avatar(c)}<span class="cc-text"><span class="cc-name">${esc(c.name)}</span><span class="cc-sub">${esc(connSub(c))}</span></span><span class="conn-dot" style="background:${esc(colorOf(c))}"></span></button>`;
   ov.innerHTML = `<div class="scrim" data-scrim style="background:transparent;animation:none"></div><div class="menu glass-strong" role="menu" style="top:${r.bottom + 8}px;left:${Math.max(16, Math.min(r.left, innerWidth - 330))}px">
     <div class="menu-label">Connections</div>
     ${S.conns.map(row).join('')}
@@ -1800,7 +1807,7 @@ function drawWelcome() {
   W.selId = W.list[W.on] && W.list[W.on].id;
   list.innerHTML = W.list.length ? W.list.map((c, i) => `
     <div class="oc-row wl-row${i === W.on ? ' on' : ''}" data-i="${i}" role="option" aria-selected="${i === W.on}">
-      <span class="eng-badge ${c.engine}" style="--status:${esc(colorOf(c))}">${ENGINE[c.engine].short}</span>
+      ${avatar(c)}
       <span class="cc-text"><span class="cc-name">${esc(c.name || 'Untitled')} ${envPill(c)}</span><span class="cc-sub">${esc(connSub(c))}</span></span>
       <button class="icon-btn oc-edit" data-edit="${i}" title="Edit connection" aria-label="Edit ${esc(c.name)}">${ic('pencil')}</button>
     </div>`).join('')

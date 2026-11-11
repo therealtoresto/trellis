@@ -1296,3 +1296,26 @@ html.mac .start-bar { padding-left: 86px; }
 .wl-foot kbd { margin-right: 3px; }
 .menu-item.danger { color: var(--deleted); }
 .menu-item.danger .icon { color: var(--deleted); }
+
+/* Connection avatars: an icon on a disc in the connection's status color. */
+.eng-badge, .eng-badge.postgres, .eng-badge.mysql, .eng-badge.sqlite {
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(150deg, rgba(255,255,255,.32), rgba(255,255,255,0) 55%), var(--status, #4f7fa6);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 3px 10px rgba(0,0,0,.18);
+}
+.oc-row .eng-badge { box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 3px 10px rgba(0,0,0,.18); }
+.oc-row.on .eng-badge { box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 0 0 2px rgba(255,255,255,.55); }
+.eng-badge .conn-icon { width: 60%; height: 60%; }
+.icon-pick { display: grid; grid-template-columns: repeat(auto-fill, 30px); gap: 5px; }
+.icon-opt {
+  width: 30px; height: 30px; padding: 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: 50%;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  transition: transform .14s var(--ease-spring), background-color .14s, color .14s;
+}
+.icon-opt:hover { color: var(--fg); transform: translateY(-1px); }
+.icon-opt .conn-icon { width: 17px; height: 17px; }
+.icon-opt.on { color: #fff; background: linear-gradient(150deg, rgba(255,255,255,.32), rgba(255,255,255,0) 55%), var(--status); box-shadow: 0 0 0 2px color-mix(in srgb, var(--status) 45%, transparent); }
