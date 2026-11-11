@@ -43,8 +43,17 @@ sudo apt install ./Trellis_*_amd64.deb
 Or run the AppImage without installing: `chmod +x Trellis_*.AppImage && ./Trellis_*.AppImage`. Passwords go to the
 Secret Service (GNOME Keyring on Ubuntu). Closing the last window quits Trellis on Linux.
 
-**macOS** (Apple silicon): unzip `Trellis_*_macos_arm64.zip` and move `Trellis.app` to Applications. The build is not
-signed, so the first launch needs right-click → Open, or `xattr -dr com.apple.quarantine /Applications/Trellis.app`.
+**macOS** (Apple silicon, macOS 11 or newer) with Homebrew:
+
+```sh
+brew tap therealtoresto/trellis https://github.com/therealtoresto/trellis
+brew install --cask trellis
+```
+
+The cask ([Casks/trellis.rb](Casks/trellis.rb)) always installs the newest release and clears the quarantine flag, as
+the app is not signed by Apple. Without Homebrew: unzip `Trellis_macos_arm64.zip` from the release, move `Trellis.app`
+to Applications, and open it the first time with right-click → Open (or run
+`xattr -dr com.apple.quarantine /Applications/Trellis.app`).
 
 **Updates** come from inside the app: the welcome window shows an *Update to x.y.z* button when a newer release is
 out, and **Trellis → Check for Updates…** looks on demand. Either downloads the release, checks its signature,
