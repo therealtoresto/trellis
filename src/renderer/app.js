@@ -599,7 +599,84 @@ function cellHTML(v, cls, ci) {
   return `<td data-c="${ci}" class="txt${j}${c}">${esc(t)}</td>`;
 }
 
-function gridHTML(tab, m) {
+/* Only the rows near the viewport are in the page: a spacer row above and below stands in for the rest, so a
+   page of a thousand rows scrolls as lightly as one of fifty. */
+const OVERSCAN = 30;
+let ROW_H = 0;
+const rowH = () => ROW_H || (ROW_H = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h')) || 26);
+
+function rowWindow(wrap, n) {
+  const h = rowH(), top = Math.max(0, wrap.scrollTop - 30), view = wrap.clientHeight || 800;
+  const first = Math.floor(top / h), last = Math.ceil((top + view) / h);
+  return { start: Math.max(0, first - OVERSCAN), end: Math.min(n, last + OVERSCAN) };
+}
+
+function rowHTML(tab, r, ri) {
+  const sel = tab.sel && tab.sel.r === ri;
+  let h = `<tr data-r="${ri}" class="${r.cls}${sel ? ' sel' : ''}"><td class="rn">${r.rn}</td>`;
+  r.vals.forEach((v, ci) => {
+    const cls = [];
+    if (r.edited && r.edited.has(ci)) cls.push('edited');
+    if (sel && tab.sel.c === ci) cls.push('cur');
+    h += cellHTML(v, cls, ci);
+  });
+  return h + '</tr>';
+}
+
+function rowsHTML(tab, m, win) {
+  const span = m.cols.length + 1, pad = n => n > 0 ? `<tr class="vpad" aria-hidden="true"><td colspan="${span}" style="height:${n * rowH()}px"></td></tr>` : '';
+  let h = pad(win.start);
+  for (let ri = win.start; ri < win.end; ri++) h += rowHTML(tab, m.rows[ri], ri);
+  return h + pad(m.rows.length - win.end);
+}
+
+// Draws the rows for the current scroll position; does nothing while the rendered rows still cover the view.
+function syncRows(wrap, force = false) {
+  const tab = cur(), m = tab && tab.model, win = wrap && wrap._win;
+  const tbody = wrap && $('.grid tbody', wrap);
+  if (!m || !win || !tbody || $('td.editing', tbody)) return;
+  const want = rowWindow(wrap, m.rows.length);
+  const h = rowH(), top = wrap.scrollTop, bottom = top + wrap.clientHeight;
+  const covered = win.start * h <= Math.max(0, top - 30) && (win.end >= m.rows.length || win.end * h >= bottom);
+  if (!force && covered) return;
+  wrap._win = want;
+  tbody.innerHTML = rowsHTML(tab, m, want);
+}
+
+// Puts row ri in the page, scrolling to it first when it is far from the view.
+function ensureRow(ri) {
+  const wrap = $('#tabBody .grid-wrap');
+  if (!wrap || !wrap._win || (ri >= wrap._win.start && ri < wrap._win.end)) return;
+  const h = rowH(), head = 30, y = ri * h;
+  if (y < wrap.scrollTop) wrap.scrollTop = y;
+  else if (y + h + head > wrap.scrollTop + wrap.clientHeight) wrap.scrollTop = y + h + head - wrap.clientHeight;
+  syncRows(wrap, true);
+}
+
+// Rows are measured once from the page, in case the stylesheet's row height is not what the browser draws.
+function measureRows(wrap) {
+  const tr = $('.grid tbody tr[data-r]', wrap);
+  if (!tr) return;
+  const h = tr.getBoundingClientRect().height;
+  if (h && Math.abs(h - rowH()) > 0.5) { ROW_H = h; syncRows(wrap, true); }
+}
+
+function fillGrid(wrap, tab, m) {
+  wrap._win = rowWindow(wrap, m.rows.length);
+  wrap.innerHTML = gridHTML(tab, m, wrap._win);
+  measureRows(wrap);
+  if (!wrap._scroll) {
+    wrap._scroll = true;
+    let queued = false;
+    wrap.addEventListener('scroll', () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; syncRows(wrap); });
+    }, { passive: true });
+  }
+}
+
+function gridHTML(tab, m, win) {
   m.cols.forEach((c, i) => { if (!tab.widths[i]) tab.widths[i] = defaultWidth(c, m.rows, i); });
   const total = 52 + m.cols.reduce((s, _, i) => s + tab.widths[i], 0);
   let h = `<table class="grid" style="width:${total}px"><colgroup><col style="width:52px">${m.cols.map((_, i) => `<col style="width:${tab.widths[i]}px">`).join('')}</colgroup><thead><tr><th class="rn"></th>`;
@@ -608,19 +685,7 @@ function gridHTML(tab, m) {
     const type = c.type ? c.type.toLowerCase().replace(/ (auto_increment|default_generated.*)$/, '') : '';
     h += `<th data-ci="${i}" title="${esc(c.name)}${c.type ? ' · ' + esc(c.type) : ''}"><div class="th-in">${c.pk ? ic('key', 'pk') : ''}<span class="th-name">${esc(c.name)}</span>${type ? `<span class="th-type">${esc(type)}</span>` : ''}<span class="th-sort">${s === 'ASC' ? '▲' : s === 'DESC' ? '▼' : ''}</span></div><span class="rz" data-rz="${i}"></span></th>`;
   });
-  h += '</tr></thead><tbody>';
-  m.rows.forEach((r, ri) => {
-    const sel = tab.sel && tab.sel.r === ri;
-    h += `<tr data-r="${ri}" class="${r.cls}${sel ? ' sel' : ''}"><td class="rn">${r.rn}</td>`;
-    r.vals.forEach((v, ci) => {
-      const cls = [];
-      if (r.edited && r.edited.has(ci)) cls.push('edited');
-      if (sel && tab.sel.c === ci) cls.push('cur');
-      h += cellHTML(v, cls, ci);
-    });
-    h += '</tr>';
-  });
-  h += '</tbody></table>';
+  h += `</tr></thead><tbody>${rowsHTML(tab, m, win)}</tbody></table>`;
   if (!m.rows.length) h += `<div class="grid-empty">${tab.kind === 'table' && tab.applied.length ? 'No rows match these filters.' : tab.kind === 'table' && tab.editable ? 'This table is empty. Add a row with + Row.' : 'No rows.'}</div>`;
   return h;
 }
@@ -979,7 +1044,8 @@ function refreshGrid(opts = {}) {
     if (!wrap) return;
     tab.model = gridModel(tab);
     if (tab.sel && !tab.model.rows[tab.sel.r]) tab.sel = null;
-    wrap.innerHTML = tab.error ? `<div class="q-error"><strong>Could not read ${esc(tab.name)}</strong><code>${esc(tab.error)}</code></div>` : gridHTML(tab, tab.model);
+    if (tab.error) { wrap._win = null; wrap.innerHTML = `<div class="q-error"><strong>Could not read ${esc(tab.name)}</strong><code>${esc(tab.error)}</code></div>`; }
+    else fillGrid(wrap, tab, tab.model);
     renderFoot(tab);
   }
   if (opts.chrome !== false) { renderPending(); renderTabs(); renderStatus(); }
@@ -1063,9 +1129,10 @@ function renderQueryResult(tab) {
   const wrap = $('#tabBody .grid-wrap'), msg = $('#qmsg');
   if (!wrap) return;
   tab.model = gridModel(tab);
+  wrap._win = null;
   if (tab.error) wrap.innerHTML = `<div class="q-error"><strong>Query failed</strong><code>${esc(tab.error)}</code></div>`;
   else if (!tab.result) wrap.innerHTML = `<div class="grid-empty">${tab.msg ? 'The statement ran and returned no rows.' : `Write a query and press <kbd>${MOD}</kbd> <kbd>↵</kbd> to run it. Select part of it to run only that part.`}</div>`;
-  else wrap.innerHTML = gridHTML(tab, tab.model);
+  else fillGrid(wrap, tab, tab.model);
   if (msg) msg.innerHTML = tab.msg || '';
 }
 
@@ -1136,6 +1203,7 @@ function selectCell(ri, ci, scroll = true) {
   if (!tab || !tab.model) return;
   const prev = tab.sel;
   tab.sel = { r: ri, c: ci };
+  if (scroll) ensureRow(ri);
   if (prev) {
     const pr = $(`#tabBody .grid tbody tr[data-r="${prev.r}"]`);
     if (pr) pr.classList.remove('sel');

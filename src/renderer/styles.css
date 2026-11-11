@@ -14,6 +14,7 @@
   --deleted: #c4442f;
   --input-bg: rgba(255, 255, 255, 0.7);
   --head-bg: rgba(247, 248, 251, 0.9);
+  --head-solid: rgb(247, 248, 251);
   --glass-fill: rgba(255, 255, 255, 0.62);
   --glass-fill-strong: rgba(255, 255, 255, 0.84);
   --glass-sheen: linear-gradient(160deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.35) 45%, rgba(255, 255, 255, 0.15));
@@ -70,6 +71,7 @@
     --deleted: #e0705c;
     --input-bg: rgba(0, 0, 0, 0.22);
     --head-bg: rgba(35, 36, 40, 0.92);
+    --head-solid: rgb(35, 36, 40);
     --glass-fill: rgba(32, 33, 37, 0.56);
     --glass-fill-strong: rgba(29, 30, 34, 0.8);
     --glass-sheen: linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 45%, rgba(255, 255, 255, 0));
@@ -109,6 +111,7 @@
   --deleted: #e0705c;
   --input-bg: rgba(0, 0, 0, 0.22);
   --head-bg: rgba(35, 36, 40, 0.92);
+  --head-solid: rgb(35, 36, 40);
   --glass-fill: rgba(32, 33, 37, 0.56);
   --glass-fill-strong: rgba(29, 30, 34, 0.8);
   --glass-sheen: linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 45%, rgba(255, 255, 255, 0));
@@ -557,16 +560,14 @@ kbd {
 .grid thead th {
   position: sticky; top: 0; z-index: 2;
   height: 30px;
-  background: var(--head-bg);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  background: var(--head-solid);
   border-bottom: 1px solid var(--line-strong);
   font-weight: 600;
   cursor: pointer;
   user-select: none;
   padding-right: 6px;
 }
-.grid thead th:hover { background: color-mix(in srgb, var(--head-bg) 80%, var(--accent) 8%); }
+.grid thead th:hover { background: color-mix(in srgb, var(--head-solid) 92%, var(--accent)); }
 .th-in { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .th-name { overflow: hidden; text-overflow: ellipsis; }
 .th-type { font: 400 10.5px var(--mono); color: var(--faint); flex: none; }
@@ -584,12 +585,12 @@ kbd {
   text-align: right;
   color: var(--faint);
   font-size: 11px;
-  background: var(--head-bg);
+  background: var(--head-solid);
   padding: 0 8px;
   cursor: default;
 }
 .grid thead .rn { z-index: 3; }
-.grid tbody tr { transition: background-color .12s; }
+.grid tbody tr.vpad td, .grid tbody tr.vpad:hover td { padding: 0; border: 0; background: none !important; }
 .grid tbody tr:hover td:not(.rn) { background: var(--glass-hover); }
 .grid td.num { text-align: right; }
 .grid td.json { font: 11.5px var(--mono); color: var(--muted); }

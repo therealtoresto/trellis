@@ -59,6 +59,39 @@
   for (let i = 0; i < 50 && !T.S.conn; i++) await sleep(100);
   await sleep(300);
   await trellis.selftestLog(`workspace opened on ${T.S.conn && T.S.conn.name}: ${JSON.stringify(await trellis.debugWindows())}`);
+
+  // A large result keeps only the rows near the view in the page, and scrolling, selecting and the last row still work.
+  const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+  const bigGrid = async () => {
+    await step('large result', async () => {
+      T.newQueryTab("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 20000) SELECT i, 'row ' || i AS label, i * 1.5 AS v, printf('%040d', i) AS pad FROM n");
+      T.runActive();
+      for (let i = 0; i < 50 && !(T.cur().result); i++) await sleep(100);
+      await sleep(200);
+      const w = $('#tabBody .grid-wrap');
+      const rows = () => $$('#tabBody .grid tbody tr[data-r]');
+      const drawn = rows().length;
+      const firstShown = () => { const top = w.getBoundingClientRect().top + 31; const tr = rows().find(r => r.getBoundingClientRect().bottom > top); return tr && tr.querySelector('td[data-c="1"]').textContent; };
+      w.scrollTop = w.scrollHeight / 2; await frame(); await frame();
+      const middle = firstShown();
+      const t0 = performance.now(); let worst = 0;
+      for (let k = 0; k < 120; k++) { const t = performance.now(); w.scrollTop += 700; await frame(); worst = Math.max(worst, performance.now() - t); }
+      const perFrame = Math.round((performance.now() - t0) / 120 * 10) / 10;
+      w.scrollTop = w.scrollHeight; await frame(); await frame();
+      const last = rows().pop().querySelector('td[data-c="1"]').textContent;
+      T.selectCell(0, 1); await frame();
+      const top = { scrollTop: w.scrollTop, cur: $('#tabBody td.cur') && $('#tabBody td.cur').textContent };
+      T.selectCell(14999, 2); await frame();
+      const jump = $('#tabBody td.cur') && $('#tabBody td.cur').parentElement.querySelector('td[data-c="1"]').textContent;
+      const ok = drawn < 150 && /row 1\d{4}/.test(middle) && last === 'row 20000' && top.cur === 'row 1' && jump === 'row 15000';
+      return { ok, drawn, total: T.cur().result.values.length, rowHeight: rows()[0].getBoundingClientRect().height, middle, last, top, jump, msPerScrollFrame: perFrame, worstFrame: Math.round(worst) };
+    });
+  };
+  if ((await trellis.selftestOnly()) === 'grid') {
+    await bigGrid();
+    await trellis.selftestLog('done');
+    return trellis.selftestDone();
+  }
   await lights('in the workspace');
   await trellis.selftestResize(1200, 780); await lights('after resize');
   await trellis.selftestResize(1440, 900); await lights('after resize back');
@@ -94,6 +127,7 @@
     $('.modal .btn.commit').click(); await sleep(500);
     return { pending: T.cur().pending.edits.size, country: T.cur().rows[2].vals[3] };
   });
+  await bigGrid();
   await step('blob cell', async () => { const t = T.newQueryTab("SELECT x'00ff' AS b, 9007199254740993 AS big, 1.5 AS f, NULL AS n"); T.runActive(); await sleep(300); return [...document.querySelectorAll('.grid tbody td')].map(td => td.textContent); });
 
   const pg = { name: 'Shop — staging', engine: 'postgres', env: 'staging', host: '127.0.0.1', port: 55432, user: 'postgres', password: 'strata', database: 'shop', sslMode: 'prefer' };
