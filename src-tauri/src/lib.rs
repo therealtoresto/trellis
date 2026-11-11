@@ -12,9 +12,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use store::Store;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+// The window look (overlay title bar, vibrancy) is macOS only.
+#[cfg(target_os = "macos")]
 use tauri::utils::config::WindowEffectsConfig;
+#[cfg(target_os = "macos")]
 use tauri::window::{Effect, EffectState};
-use tauri::{AppHandle, Emitter, Manager, State, TitleBarStyle, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window};
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
@@ -385,6 +390,7 @@ fn create_welcome(app: &AppHandle) -> R<()> {
         let _ = w.set_focus();
         return Ok(());
     }
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut b = WebviewWindowBuilder::new(app, "welcome", WebviewUrl::App("welcome.html".into()))
         .title("Welcome to Trellis")
         .inner_size(800.0, 500.0)
@@ -641,7 +647,7 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("Trellis failed to start")
-        .run(|app, event| match event {
+        .run(|#[cfg_attr(not(target_os = "macos"), allow(unused_variables))] app, event| match event {
             // On macOS closing the last window keeps Trellis in the Dock. A quit (⌘Q, the Dock menu) arrives while
             // windows are still open, and goes through. Elsewhere closing the last window quits.
             #[cfg(target_os = "macos")]
