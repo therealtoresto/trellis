@@ -56,11 +56,14 @@ jobs:
         with:
           fetch-depth: 0 # the build number is the commit count
 
+      # WebKitGTK pulls in ~140 packages; they are cached between runs, so a slow or broken Ubuntu mirror only costs
+      # the first run after the list changes, and the step gives up after 15 minutes instead of hanging.
       - name: System libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
-            libssl-dev libdbus-1-dev pkg-config build-essential xvfb
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+        timeout-minutes: 15
+        with:
+          packages: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev libdbus-1-dev pkg-config build-essential xvfb
+          version: 1
 
       - uses: actions/setup-node@v4
         with:
@@ -192,6 +195,7 @@ jobs:
       # A flat apt repository among the release files, so releases/latest/download is always the newest one:
       # Packages lists the .deb, Release has their checksums, signed as InRelease and Release.gpg.
       - name: apt repository
+        timeout-minutes: 10
         env:
           APT_GPG_KEY: ${{ secrets.APT_GPG_KEY }}
         run: |
@@ -234,6 +238,7 @@ jobs:
     name: apt install
     needs: [version, release]
     runs-on: ubuntu-22.04
+    timeout-minutes: 20
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
