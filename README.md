@@ -1,6 +1,6 @@
 # Trellis
 
-A database client for macOS: SQLite, PostgreSQL and MySQL / MariaDB. Its look follows Dendro.
+A database client for macOS and Linux: SQLite, PostgreSQL and MySQL / MariaDB. Its look follows Dendro.
 Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScript.
 
 ## What it does
@@ -29,6 +29,43 @@ Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScr
 
 On its first launch Trellis brings over the connections saved by Strata (the earlier Electron build), without
 their passwords: type each password once.
+
+## Install
+
+GitHub Actions builds Trellis for Ubuntu and macOS on every push to `main`: open the latest
+[Build run](https://github.com/therealtoresto/trellis/actions/workflows/build.yml) and download `trellis-ubuntu` or
+`trellis-macos` under Artifacts (needs a GitHub login). Tagged versions also land on
+[Releases](https://github.com/therealtoresto/trellis/releases).
+
+**Ubuntu 22.04 or newer** (x86-64):
+
+```sh
+sudo apt install ./Trellis_0.2.0_amd64.deb
+```
+
+Or run the AppImage without installing: `chmod +x Trellis_*.AppImage && ./Trellis_*.AppImage`. Passwords go to the
+Secret Service (GNOME Keyring on Ubuntu). Closing the last window quits Trellis on Linux.
+
+**macOS** (Apple silicon): unzip `Trellis-macos-arm64.zip` and move `Trellis.app` to Applications. The build is not
+signed, so the first launch needs right-click → Open, or `xattr -dr com.apple.quarantine /Applications/Trellis.app`.
+
+### Building on Ubuntu
+
+```sh
+sudo apt install libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev libdbus-1-dev pkg-config build-essential
+curl https://sh.rustup.rs -sSf | sh       # Rust
+npm ci
+./node_modules/.bin/tauri build --bundles deb appimage   # → src-tauri/target/release/bundle/{deb,appimage}
+```
+
+### Releasing
+
+Bump `version` in `package.json` and `src-tauri/tauri.conf.json`, then push a tag; the workflow attaches the builds to a
+draft release, which you publish on GitHub.
+
+```sh
+git tag v0.3.0 && git push origin v0.3.0
+```
 
 ## Build and run
 
