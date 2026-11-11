@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What every Strata window may do: listen for menu events and close itself.",
+  "description": "What every Trellis window may do: listen for menu events, close itself and be dragged by its bars.",
   "windows": ["*"],
   "permissions": [
     "core:default",
     "core:window:allow-close",
-    "core:window:allow-destroy"
+    "core:window:allow-destroy",
+    "core:window:allow-start-dragging"
   ]
 }

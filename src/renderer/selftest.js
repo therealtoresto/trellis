@@ -111,6 +111,10 @@
       return { median: times[8], worst: times[15], all: times };
     });
   };
+  await step('window may be dragged', async () => {
+    try { await window.__TAURI_INTERNALS__.invoke('plugin:window|start_dragging'); return 'allowed'; }
+    catch (e) { return /not allowed|denied/i.test(String(e)) ? `FAILED ${e}` : `allowed (${e})`; }
+  });
   if ((await trellis.selftestOnly()) === 'grid') {
     await resizeTiming();
     await bigGrid();

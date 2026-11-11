@@ -1317,3 +1317,7 @@ html.mac .start-bar { padding-left: 86px; }
 /* WebKit does not shrink a flex child under a max-height parent, so the scrolling middle gets its own limit:
    the window less the scrim's margins, the title (52px) and the button row (60px). */
 .sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 2px; max-height: calc(100vh - clamp(16px, 8vh, 96px) - 16px - 112px); }
+
+/* With the window's own vibrancy behind them, the main panels need no blur of their own: theirs only blurred the
+   ambient gradient, and redrew it on every frame of a resize. */
+html.vibrant .toolbar, html.vibrant .sidebar, html.vibrant .workspace, html.vibrant .inspector { -webkit-backdrop-filter: none; backdrop-filter: none; }

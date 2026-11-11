@@ -8,8 +8,8 @@
 <body>
   <div class="ambient" aria-hidden="true"></div>
 
-  <div id="app">
-    <header class="toolbar glass" data-tauri-drag-region>
+  <div id="app" data-tauri-drag-region>
+    <header class="toolbar glass" data-tauri-drag-region="deep">
       <div class="brand"><span class="brand-mark" data-icon="trellis"></span><span class="brand-name">Trellis</span></div>
       <button class="conn" id="connBtn" aria-haspopup="menu">
         <span class="conn-dot" id="connDot"></span>
@@ -29,7 +29,7 @@
       <button class="tool icon-only on" id="inspectorBtn" title="Show or hide the row inspector (⌘I)" aria-label="Toggle inspector"><span data-icon="inspector"></span></button>
     </header>
 
-    <div class="layout" id="layout">
+    <div class="layout" id="layout" data-tauri-drag-region>
       <aside class="sidebar glass" id="sidebar">
         <div class="side-panes"><div class="seg" id="sidePanes" role="tablist">
           <button data-pane="items" class="on">Items</button><button data-pane="queries">Queries</button><button data-pane="history">History</button>
