@@ -1,6 +1,6 @@
 # Trellis
 
-A database client for macOS and Linux: SQLite, PostgreSQL and MySQL / MariaDB. Its look follows Dendro.
+A database client for macOS, Linux and Windows: SQLite, PostgreSQL and MySQL / MariaDB. Its look follows Dendro.
 Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScript.
 
 ## What it does
@@ -85,9 +85,22 @@ the app is not signed by Apple. Without Homebrew: unzip `Trellis_macos_arm64.zip
 to Applications, and open it the first time with right-click → Open (or run
 `xattr -dr com.apple.quarantine /Applications/Trellis.app`).
 
+**Windows** (10 or 11, x64): run `Trellis_*_x64-setup.exe` from the release; it installs for the current user, no
+administrator needed. Or with [Scoop](https://scoop.sh):
+
+```powershell
+scoop bucket add trellis https://github.com/therealtoresto/trellis
+scoop install trellis/trellis
+```
+
+The build is not code-signed, so the first launch of the installer shows SmartScreen's *Windows protected your PC*:
+choose *More info → Run anyway*. Passwords go to the Windows Credential Manager. The SSH tunnel uses Windows' own
+OpenSSH agent or Pageant for the agent sign-in. Scoop keeps its copy up to date with `scoop update trellis`; the
+release workflow writes the new version into [bucket/trellis.json](bucket/trellis.json).
+
 **Updates** come from inside the app: the welcome window shows an *Update to x.y.z* button when a newer release is
 out, and **Trellis → Check for Updates…** looks on demand. Either downloads the release, checks its signature,
-installs it over the running copy (the `.app`, the AppImage, or the `.deb` through a password prompt) and restarts.
+installs it over the running copy (the `.app`, the AppImage, the Windows installer, or the `.deb` through a password prompt) and restarts.
 This works for every copy from 0.3.0 on, however it was installed; Homebrew leaves the app to update itself. Copies
 of 0.2.x predate the updater: install 0.3.0 over them once by any of the ways above. An AppImage updates only where
 its user may write the file (such as `~/Applications`), and the repository has to stay public for updates to reach
@@ -112,7 +125,7 @@ npm run release            # 0.2.0 → 0.2.1; or: npm run release minor | major 
 
 It sets the version in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`, commits it, tags the
 commit `v<version>` and pushes both. The tag starts [the workflow](.github/workflows/build.yml): it builds Ubuntu and
-macOS, opens the Ubuntu build on a virtual screen as a smoke test, and when both pass publishes the release with the
+macOS and Windows, opens the Ubuntu and Windows builds as a smoke test, and when all pass publishes the release with the
 `.deb`, the `.AppImage`, the zipped macOS app (`Trellis_macos_arm64.zip`, one name for every release), the signed
 update files and the apt repository, its notes listing the commits since the last one. The welcome window
 shows the version and the build number (the commit count), as in `Version 0.2.1 (18)`. To get the files without a
