@@ -1,0 +1,28 @@
+{
+  "version": "0.5.0",
+  "description": "A database client for SQLite, PostgreSQL and MySQL",
+  "homepage": "https://github.com/therealtoresto/trellis",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/therealtoresto/trellis/releases/download/v0.5.0/Trellis_0.5.0_windows_x64.zip",
+      "hash": "db85843bbc6679e283d410eed161ed3afc16ff246470b22e1a5f72f0a780bed7"
+    }
+  },
+  "bin": "trellis.exe",
+  "shortcuts": [
+    [
+      "trellis.exe",
+      "Trellis"
+    ]
+  ],
+  "notes": "Saved passwords are kept in the Windows Credential Manager. Update with: scoop update trellis",
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/therealtoresto/trellis/releases/download/v$version/Trellis_$version_windows_x64.zip"
+      }
+    }
+  }
+}
