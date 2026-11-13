@@ -17,6 +17,11 @@ pub fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
+/// The user's home folder: HOME on macOS and Linux, USERPROFILE on Windows.
+pub fn home_dir() -> std::path::PathBuf {
+    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(std::path::PathBuf::from).unwrap_or_default()
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Ref {
     #[serde(default, skip_serializing_if = "Option::is_none")]

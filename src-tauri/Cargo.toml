@@ -28,8 +28,8 @@ tokio-postgres = "0.7"
 postgres-native-tls = "0.5"
 native-tls = "0.2"
 mysql_async = { version = "0.37", features = ["native-tls-tls"] }
-# The macOS Keychain; on Linux the Secret Service (GNOME Keyring, KWallet).
-keyring = { version = "3", features = ["apple-native", "sync-secret-service", "crypto-rust"] }
+# The macOS Keychain, the Windows Credential Manager, the Secret Service on Linux (GNOME Keyring, KWallet).
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-updater = "2"
 futures-util = "0.3"

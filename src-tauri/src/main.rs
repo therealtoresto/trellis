@@ -1,3 +1,6 @@
+// A release build on Windows opens no console window beside the app.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 fn main() {
     // WebKitGTK's DMA-BUF renderer leaves the window white on some GPUs and drivers (seen with AMD graphics on
     // Ubuntu 24.04); the older path draws everywhere. It has to be set before WebKit starts. Set the variable to 0

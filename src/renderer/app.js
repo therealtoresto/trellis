@@ -2438,7 +2438,9 @@ async function offerUpdate() {
     catch (e) { idle(); toast(`The update failed: ${e.message}`, true); }
     finally { off(); }
   };
-  btn.onclick = () => up.windows
+  btn.onclick = () => up.managed
+    ? showModal({ title: `Trellis ${up.version} is out`, text: 'Scoop installed this copy, so Scoop updates it. Run this in a terminal:', sql: up.managed, actions: [{ label: 'Copy command', run: () => copy(up.managed, 'Command copied') }, { label: 'OK', primary: true }] })
+    : up.windows
     ? showModal({ title: `Update to Trellis ${up.version}?`, text: `Trellis restarts to finish, which closes ${plural(up.windows, 'open database window')}. Uncommitted changes in them are lost.`, actions: [{ label: 'Later' }, { label: 'Update and Restart', primary: true, run: install }] })
     : install();
 }

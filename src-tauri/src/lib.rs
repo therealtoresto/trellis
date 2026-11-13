@@ -159,7 +159,7 @@ async fn demo_reset(window: Window, state: State<'_, AppState>) -> R<()> {
 /* ---------- files ---------- */
 
 fn query_dir(app: &AppHandle) -> PathBuf {
-    app.path().document_dir().unwrap_or_else(|_| PathBuf::from(std::env::var("HOME").unwrap_or_default())).join("Trellis Queries")
+    app.path().document_dir().unwrap_or_else(|_| drivers::home_dir()).join("Trellis Queries")
 }
 
 fn path_of(p: tauri_plugin_dialog::FilePath) -> R<String> {
@@ -169,7 +169,7 @@ fn path_of(p: tauri_plugin_dialog::FilePath) -> R<String> {
 /// Picks an SSH private key, starting in ~/.ssh.
 #[tauri::command]
 async fn dialog_pick_key(app: AppHandle) -> R<Option<String>> {
-    let dir = PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".ssh");
+    let dir = drivers::home_dir().join(".ssh");
     match app.dialog().file().set_title("Choose an SSH key").set_directory(dir).blocking_pick_file() {
         Some(p) => Ok(Some(path_of(p)?)),
         None => Ok(None),
@@ -319,6 +319,12 @@ async fn install_update(app: AppHandle, update: tauri_plugin_updater::Update, pr
     app.restart()
 }
 
+/// A copy Scoop installed updates through Scoop: installing over it would leave Scoop's record behind.
+fn managed_by() -> Option<&'static str> {
+    let exe = std::env::current_exe().ok()?.to_string_lossy().to_lowercase();
+    exe.contains("\\scoop\\apps\\").then_some("scoop update trellis")
+}
+
 /// The newer release on GitHub, if there is one, and how many database windows a restart would close.
 #[tauri::command]
 async fn update_check(app: AppHandle) -> R<Option<Value>> {
@@ -326,12 +332,15 @@ async fn update_check(app: AppHandle) -> R<Option<Value>> {
         return Ok(None);
     }
     let windows = app.webview_windows().keys().filter(|l| l.starts_with("trellis-")).count();
-    Ok(find_update(&app).await?.map(|u| json!({ "version": u.version, "current": u.current_version, "notes": u.body, "windows": windows })))
+    Ok(find_update(&app).await?.map(|u| json!({ "version": u.version, "current": u.current_version, "notes": u.body, "windows": windows, "managed": managed_by() })))
 }
 
 /// Installs the newer release and restarts; the window that asked hears the download as `update` events.
 #[tauri::command]
 async fn update_install(app: AppHandle, window: WebviewWindow) -> R<()> {
+    if let Some(cmd) = managed_by() {
+        return Err(format!("Scoop installed this copy; update it with: {cmd}"));
+    }
     let update = find_update(&app).await?.ok_or_else(|| "Trellis is up to date.".to_string())?;
     let (a, label) = (app.clone(), window.label().to_string());
     install_update(app, update, move |share| { let _ = a.emit_to(label.as_str(), "update", share); }).await
@@ -348,6 +357,10 @@ fn check_updates_from_menu(app: &AppHandle) {
             Ok(None) => app.dialog().message(format!("Trellis {version} is the latest version.")).title("You’re up to date").kind(MessageDialogKind::Info).show(|_| {}),
             Err(e) => app.dialog().message(format!("Couldn’t reach GitHub to check for updates: {e}")).title("Check for Updates").kind(MessageDialogKind::Warning).show(|_| {}),
             Ok(Some(u)) => {
+                if let Some(cmd) = managed_by() {
+                    app.dialog().message(format!("Trellis {} is out; you have {version}. Scoop installed this copy, so update it from a terminal:\n\n{cmd}", u.version)).title("Update available").kind(MessageDialogKind::Info).show(|_| {});
+                    return;
+                }
                 let a = app.clone();
                 let notes = u.body.clone().filter(|b| !b.trim().is_empty()).map(|b| format!("\n\n{}", b.chars().take(600).collect::<String>())).unwrap_or_default();
                 app.dialog()
@@ -593,12 +606,14 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::about(app, Some("About Trellis"), None)?,
             &it("check-updates", "Check for Updates…", None)?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::hide(app, None)?,
-            &PredefinedMenuItem::hide_others(app, None)?,
-            &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::quit(app, None)?,
         ],
     )?;
+    // Hide and Hide Others exist on macOS only.
+    #[cfg(target_os = "macos")]
+    {
+        about.insert_items(&[&PredefinedMenuItem::hide(app, None)?, &PredefinedMenuItem::hide_others(app, None)?, &PredefinedMenuItem::separator(app)?], 3)?;
+    }
     Menu::with_items(app, &[&about, &file, &edit, &database, &view, &window])
 }
 

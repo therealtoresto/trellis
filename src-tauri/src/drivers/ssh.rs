@@ -31,7 +31,7 @@ struct Client {
 }
 
 fn home() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default())
+    super::home_dir()
 }
 
 impl client::Handler for Client {
@@ -81,9 +81,11 @@ async fn with_key(session: &mut client::Handle<Client>, user: &str, path: &PathB
     Ok(session.authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(key), hash)).await.map_err(err)?.success())
 }
 
-#[cfg(unix)]
-async fn with_agent(session: &mut client::Handle<Client>, user: &str) -> bool {
-    let Ok(mut agent) = keys::agent::client::AgentClient::connect_env().await else { return false };
+/// Signs in with each key an SSH agent holds until one is accepted.
+async fn agent_keys<R>(session: &mut client::Handle<Client>, user: &str, mut agent: keys::agent::client::AgentClient<R>) -> bool
+where
+    R: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
     let Ok(ids) = agent.request_identities().await else { return false };
     for id in ids {
         let key = id.public_key().into_owned();
@@ -97,9 +99,28 @@ async fn with_agent(session: &mut client::Handle<Client>, user: &str) -> bool {
     false
 }
 
-#[cfg(not(unix))]
-async fn with_agent(_: &mut client::Handle<Client>, _: &str) -> bool {
-    false
+/// The agent SSH_AUTH_SOCK names.
+#[cfg(unix)]
+async fn with_agent(session: &mut client::Handle<Client>, user: &str) -> bool {
+    match keys::agent::client::AgentClient::connect_env().await {
+        Ok(agent) => agent_keys(session, user, agent).await,
+        Err(_) => false,
+    }
+}
+
+/// Windows' own OpenSSH agent, then Pageant (PuTTY's).
+#[cfg(windows)]
+async fn with_agent(session: &mut client::Handle<Client>, user: &str) -> bool {
+    use keys::agent::client::AgentClient;
+    if let Ok(agent) = AgentClient::connect_named_pipe(r"\\.\pipe\openssh-ssh-agent").await {
+        if agent_keys(session, user, agent).await {
+            return true;
+        }
+    }
+    match AgentClient::connect_pageant().await {
+        Ok(agent) => agent_keys(session, user, agent).await,
+        Err(_) => false,
+    }
 }
 
 /// Opens the SSH connection, signs in and starts forwarding to the database `cfg` names. `default_port` is the
@@ -111,7 +132,7 @@ pub async fn open(cfg: &Config, default_port: u16, known: PathBuf) -> R<Tunnel> 
         serde_json::Value::String(s) => s.trim().parse().ok(),
         _ => None,
     }).map(|p| p as u16).unwrap_or(22);
-    let user = Config::text(&cfg.ssh_user).map(String::from).or_else(|| std::env::var("USER").ok()).ok_or("Enter the SSH user.")?;
+    let user = Config::text(&cfg.ssh_user).map(String::from).or_else(|| std::env::var("USER").or_else(|_| std::env::var("USERNAME")).ok()).ok_or("Enter the SSH user.")?;
     let target = (Config::text(&cfg.host).unwrap_or("127.0.0.1").to_string(), cfg.port(default_port));
 
     let config = Arc::new(client::Config { keepalive_interval: Some(Duration::from_secs(30)), ..Default::default() });

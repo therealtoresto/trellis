@@ -162,9 +162,72 @@ jobs:
           name: trellis-macos
           path: Trellis_macos_arm64.*
 
+  windows:
+    name: Windows
+    needs: version
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Build ${{ env.VERSION }}
+        run: ./node_modules/.bin/tauri build --bundles nsis --config "$UPDATER"
+
+      - name: Driver tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --release
+
+      # Opens the welcome window, the example database and a 20,000-row result through WebView2.
+      - name: Smoke test
+        run: |
+          mkdir -p smoke
+          TRELLIS_SELFTEST="$(cygpath -w "$PWD/smoke")" TRELLIS_SELFTEST_ONLY=grid TRELLIS_USERDATA="$(cygpath -w "$(mktemp -d)")" \
+            timeout 180 src-tauri/target/release/trellis.exe || true
+          cat smoke/log.txt
+          grep -q "^welcome shows the build: \[\"Version $VERSION " smoke/log.txt
+          grep -q '^workspace opened on Example' smoke/log.txt
+          grep -q '^large result: {"ok":true' smoke/log.txt
+          grep -q '^done' smoke/log.txt
+
+      # The installer (and its signature, for the updater), and a portable zip for Scoop: the app and the example
+      # database it keeps beside itself.
+      - name: Package
+        run: |
+          cp src-tauri/target/release/bundle/nsis/*-setup.exe src-tauri/target/release/bundle/nsis/*-setup.exe.sig .
+          mkdir -p portable
+          cp src-tauri/target/release/trellis.exe src-tauri/resources/gamification_demo.sqlite portable/
+          (cd portable && 7z a -tzip "../Trellis_${VERSION}_windows_x64.zip" trellis.exe gamification_demo.sqlite)
+          ls -l *.exe *.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trellis-windows
+          path: |
+            *-setup.exe
+            *-setup.exe.sig
+            Trellis_*_windows_x64.zip
+
   release:
     name: Tag and release
-    needs: [version, linux, macos]
+    needs: [version, linux, macos, windows]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     env:
@@ -193,12 +256,12 @@ jobs:
               if (!f || !fs.existsSync(f + ".sig")) throw new Error(`no signed file for ${re}`);
               return { url: base + path.basename(f), signature: fs.readFileSync(f + ".sig", "utf8").trim() };
             };
-            const mac = entry(/macos_arm64\.app\.tar\.gz$/), appimage = entry(/\.AppImage$/), deb = entry(/\.deb$/);
+            const mac = entry(/macos_arm64\.app\.tar\.gz$/), appimage = entry(/\.AppImage$/), deb = entry(/\.deb$/), win = entry(/-setup\.exe$/);
             fs.writeFileSync("dist/latest.json", JSON.stringify({
               version: process.env.VERSION,
               notes: fs.readFileSync("notes.txt", "utf8").trim(),
               pub_date: new Date().toISOString(),
-              platforms: { "darwin-aarch64": mac, "darwin-aarch64-app": mac, "linux-x86_64": appimage, "linux-x86_64-appimage": appimage, "linux-x86_64-deb": deb },
+              platforms: { "darwin-aarch64": mac, "darwin-aarch64-app": mac, "linux-x86_64": appimage, "linux-x86_64-appimage": appimage, "linux-x86_64-deb": deb, "windows-x86_64": win, "windows-x86_64-nsis": win },
             }, null, 2));
           '
           cat dist/latest.json
@@ -236,6 +299,8 @@ jobs:
             dist/**/*.AppImage
             dist/Trellis_macos_arm64.zip
             dist/Trellis_macos_arm64.app.tar.gz
+            dist/*-setup.exe
+            dist/Trellis_*_windows_x64.zip
             dist/latest.json
             apt/Packages
             apt/Packages.gz
@@ -243,6 +308,35 @@ jobs:
             apt/InRelease
             apt/Release.gpg
             apt/trellis.gpg
+
+      # The Scoop bucket in this repository (bucket/trellis.json) points at the new portable zip, so
+      # `scoop update trellis` finds it.
+      - name: Scoop manifest
+        run: |
+          zip=$(find dist -name "Trellis_${VERSION}_windows_x64.zip")
+          hash=$(sha256sum "$zip" | cut -d' ' -f1)
+          git fetch -q origin main && git checkout -q -B main origin/main
+          mkdir -p bucket
+          HASH="$hash" node -e '
+            const { VERSION: v, HASH: hash, GITHUB_REPOSITORY: repo } = process.env;
+            const url = ver => `https://github.com/${repo}/releases/download/v${ver}/Trellis_${ver}_windows_x64.zip`;
+            require("fs").writeFileSync("bucket/trellis.json", JSON.stringify({
+              version: v,
+              description: "A database client for SQLite, PostgreSQL and MySQL",
+              homepage: `https://github.com/${repo}`,
+              license: "MIT",
+              architecture: { "64bit": { url: url(v), hash } },
+              bin: "trellis.exe",
+              shortcuts: [["trellis.exe", "Trellis"]],
+              notes: "Saved passwords are kept in the Windows Credential Manager. Update with: scoop update trellis",
+              checkver: "github",
+              autoupdate: { architecture: { "64bit": { url: url("$version") } } },
+            }, null, 2) + "\n");
+          ' 
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bucket/trellis.json
+          git commit -q -m "[RELEASE] - scoop $VERSION" && git push -q origin main
 
   # Installs the release on a clean Ubuntu the way the README says, from the published files.
   apt-install:

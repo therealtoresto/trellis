@@ -18,9 +18,10 @@
     "active": true,
     "targets": ["app"],
     "category": "DeveloperTool",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.png"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico", "icons/icon.png"],
     "resources": { "resources/gamification_demo.sqlite": "gamification_demo.sqlite" },
     "macOS": { "minimumSystemVersion": "11.0" },
+    "windows": { "nsis": { "installMode": "currentUser" } },
     "createUpdaterArtifacts": false
   },
   "plugins": {
