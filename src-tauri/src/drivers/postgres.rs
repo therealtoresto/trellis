@@ -15,6 +15,7 @@ const APPROX_OVER: i64 = 200_000;
 pub struct Pg {
     client: Client,
     tls: MakeTlsConnector,
+    pub(crate) log: Option<Logger>,
 }
 
 /// One statement's output from the simple protocol.
@@ -82,7 +83,18 @@ impl Pg {
             let _ = connection.await;
         });
         client.batch_execute("SET standard_conforming_strings = on").await.map_err(pg_err)?;
-        Ok(Pg { client, tls })
+        Ok(Pg { client, tls, log: None })
+    }
+
+    async fn exec(&self, sql: &str) -> Result<(), tokio_postgres::Error> {
+        self.note(sql);
+        self.client.batch_execute(sql).await
+    }
+
+    fn note(&self, sql: &str) {
+        if let Some(log) = &self.log {
+            log(sql);
+        }
     }
 
     async fn simple(&self, sql: &str) -> R<Vec<Set>> {
@@ -93,6 +105,7 @@ impl Pg {
     /// were dropped.
     async fn simple_capped(&self, sql: &str, cap: usize) -> R<(Vec<Set>, bool)> {
         use futures_util::StreamExt;
+        self.note(sql);
         let stream = self.client.simple_query_raw(sql).await.map_err(pg_err)?;
         futures_util::pin_mut!(stream);
         let mut sets: Vec<Set> = Vec::new();
@@ -179,7 +192,7 @@ impl Pg {
     /// Bare table names in the SQL editor resolve in the schema the sidebar shows.
     pub async fn set_schema(&mut self, schema: &str) -> R<()> {
         let path = if schema == "public" { "public".to_string() } else { format!("{}, public", D.quote(schema)) };
-        self.client.batch_execute(&format!("SET search_path TO {path}")).await.map_err(pg_err)
+        self.exec(&format!("SET search_path TO {path}")).await.map_err(pg_err)
     }
 
     async fn columns_of(&self, r: &Ref) -> R<Vec<Column>> {
@@ -384,14 +397,14 @@ impl Pg {
 
     pub async fn apply(&mut self, ch: &Changes) -> R<Vec<Statement>> {
         let st = change_statements(D, &self.table(&ch.r), ch);
-        self.client.batch_execute("BEGIN").await.map_err(pg_err)?;
+        self.exec("BEGIN").await.map_err(pg_err)?;
         for s in &st {
-            if let Err(e) = self.client.batch_execute(&s.sql).await {
-                let _ = self.client.batch_execute("ROLLBACK").await;
+            if let Err(e) = self.exec(&s.sql).await {
+                let _ = self.exec("ROLLBACK").await;
                 return Err(pg_err(e));
             }
         }
-        self.client.batch_execute("COMMIT").await.map_err(pg_err)?;
+        self.exec("COMMIT").await.map_err(pg_err)?;
         Ok(st)
     }
 }

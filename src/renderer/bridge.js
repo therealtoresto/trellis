@@ -38,6 +38,7 @@
     copy: text => call('clipboard_write', { text }),
     info: () => call('app_info'),
     onMenu: fn => webview.listen('menu', e => fn(e.payload)),
+    onSqlLog: fn => webview.listen('sql-log', e => fn(e.payload)),
     // `check` says whether to hold the close; held closes come back through `ask`.
     onCloseRequested: (check, ask) => win.onCloseRequested(e => { if (check()) { e.preventDefault(); ask(); } }),
     closeWindow: () => win.destroy(),

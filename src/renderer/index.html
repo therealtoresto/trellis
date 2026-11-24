@@ -26,6 +26,7 @@
         <button class="btn commit" id="reviewBtn">Review<kbd>⌘S</kbd></button>
       </div>
       <button class="search-trigger" id="searchTrigger"><span data-icon="search"></span><span>Open anything</span><kbd>⌘P</kbd></button>
+      <button class="tool icon-only" id="consoleBtn" title="Show or hide the query log (⌘⇧L)" aria-label="Toggle the query log"><span data-icon="console"></span></button>
       <button class="tool icon-only on" id="inspectorBtn" title="Show or hide the row inspector (⌘I)" aria-label="Toggle inspector"><span data-icon="inspector"></span></button>
     </header>
 
@@ -44,6 +45,16 @@
       <main class="workspace glass-strong" id="workspace">
         <div class="tabs" id="tabs" role="tablist"></div>
         <div class="tab-body" id="tabBody"></div>
+        <div class="console-split" id="consoleSplit" title="Drag to resize" hidden></div>
+        <section class="console" id="console" aria-label="Query log" hidden>
+          <div class="console-log" id="consoleLog" tabindex="0"></div>
+          <div class="console-bar">
+            <button class="icon-btn" id="consoleClear" title="Clear the log" aria-label="Clear the log"><span data-icon="trash"></span></button>
+            <span class="console-count" id="consoleCount"></span>
+            <span class="spacer"></span>
+            <span class="hint">Every statement Trellis sends to the server, the newest at the bottom</span>
+          </div>
+        </section>
       </main>
 
       <aside class="inspector glass" id="inspector"></aside>

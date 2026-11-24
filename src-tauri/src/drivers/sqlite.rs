@@ -13,6 +13,7 @@ const D: Dialect = Dialect::Sqlite;
 pub struct Sqlite {
     conn: Connection,
     file: String,
+    pub(crate) log: Option<Logger>,
 }
 
 fn val(v: ValueRef) -> Value {
@@ -36,10 +37,22 @@ impl Sqlite {
         conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0))
             .map_err(|_| format!("{} is not a SQLite database.", base(&file)))?;
         conn.execute_batch("PRAGMA foreign_keys = ON").map_err(err)?;
-        Ok(Sqlite { conn, file })
+        Ok(Sqlite { conn, file, log: None })
+    }
+
+    fn exec(&self, sql: &str) -> rusqlite::Result<()> {
+        self.note(sql);
+        self.conn.execute_batch(sql)
+    }
+
+    fn note(&self, sql: &str) {
+        if let Some(log) = &self.log {
+            log(sql);
+        }
     }
 
     fn rows(&self, sql: &str) -> R<(Vec<String>, Vec<Vec<Value>>)> {
+        self.note(sql);
         let mut st = self.conn.prepare(sql).map_err(err)?;
         let names: Vec<String> = st.column_names().into_iter().map(String::from).collect();
         let n = names.len();
@@ -171,6 +184,7 @@ impl Sqlite {
     pub async fn query(&mut self, sql: &str) -> R<QueryResult> {
         let t0 = Instant::now();
         let mut out = QueryResult { write: is_write(sql), ..Default::default() };
+        self.note(sql);
         let mut batch = Batch::new(&self.conn, sql);
         while let Some(mut st) = batch.next().map_err(err)? {
             let n = st.column_count();
@@ -205,14 +219,14 @@ impl Sqlite {
 
     pub async fn apply(&mut self, ch: &Changes) -> R<Vec<Statement>> {
         let st = change_statements(D, &self.table(&ch.r), ch);
-        self.conn.execute_batch("SAVEPOINT trellis_commit").map_err(err)?;
+        self.exec("SAVEPOINT trellis_commit").map_err(err)?;
         for s in &st {
-            if let Err(e) = self.conn.execute_batch(&s.sql) {
-                let _ = self.conn.execute_batch("ROLLBACK TO trellis_commit; RELEASE trellis_commit");
+            if let Err(e) = self.exec(&s.sql) {
+                let _ = self.exec("ROLLBACK TO trellis_commit; RELEASE trellis_commit");
                 return Err(err(e));
             }
         }
-        self.conn.execute_batch("RELEASE trellis_commit").map_err(err)?;
+        self.exec("RELEASE trellis_commit").map_err(err)?;
         Ok(st)
     }
 }

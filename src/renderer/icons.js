@@ -16,6 +16,7 @@ window.ICONS = {
   filter: '<path d="M2.5 3.5h11L9.5 8.5v4l-3 1v-5z"/>',
   key: '<circle cx="5.5" cy="10.5" r="2.5"/><path d="M7.3 8.7 13 3M11 5l1.5 1.5"/>',
   inspector: '<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M10 3v10"/>',
+  console: '<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 9.5h12M4.5 11.5h3"/>',
   history: '<path d="M2.8 8a5.2 5.2 0 1 0 1.5-3.7M2.5 2.8v2.6h2.6M8 5.3V8l1.8 1.4"/>',
   code: '<path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/>',
   copy: '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2c0-.6-.4-1-1-1h-6c-.6 0-1 .4-1 1v6c0 .6.4 1 1 1h2"/>',

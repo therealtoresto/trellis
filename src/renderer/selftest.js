@@ -264,6 +264,30 @@
       return r;
     });
   };
+  // The query log shows every statement sent, highlighted, and hides again; History is highlighted too.
+  const queryLog = async () => {
+    await step('query log', async () => {
+      if (!T.LOG.shown) T.toggleConsole();
+      T.LOG.entries = []; document.querySelector('#consoleClear').click();
+      await T.openTable({ name: 'missions' }); await sleep(300);
+      T.newQueryTab("SELECT 'from the log' AS marker"); T.runActive();
+      for (let i = 0; i < 40 && !T.cur().result; i++) await sleep(50);
+      await sleep(150);
+      const log = document.querySelector('#consoleLog'), texts = [...log.querySelectorAll('.log-sql')].map(x => x.textContent);
+      const r = {
+        shown: !document.querySelector('#console').hidden, entries: texts.length,
+        page: texts.some(t => /FROM "missions"/.test(t)), mine: texts.some(t => /from the log/.test(t)),
+        stamped: /^-- \d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}$/.test(log.querySelector('.log-at').textContent),
+        highlighted: !!log.querySelector('.log-sql .t-kw'), height: document.querySelector('#console').offsetHeight,
+      };
+      T.setPane('history'); await sleep(100);
+      r.history = !!document.querySelector('#sideList .hi-sql .t-kw');
+      T.setPane('items');
+      T.toggleConsole(); r.hidden = document.querySelector('#console').hidden;
+      r.ok = r.shown && r.page && r.mine && r.stamped && r.highlighted && r.history && r.hidden && r.height >= 80;
+      return r;
+    });
+  };
   // In a narrow column the type gives way, so the column's name stays readable.
   const narrowHeader = async () => {
     await step('narrow column keeps its name', async () => {
@@ -340,6 +364,7 @@
     await foreignKeys();
     await contextMenus();
     await narrowHeader();
+    await queryLog();
     await trellis.selftestLog('done');
     return trellis.selftestDone();
   }
@@ -385,6 +410,7 @@
   await foreignKeys();
   await contextMenus();
   await narrowHeader();
+  await queryLog();
   await step('blob cell', async () => { const t = T.newQueryTab("SELECT x'00ff' AS b, 9007199254740993 AS big, 1.5 AS f, NULL AS n"); T.runActive(); await sleep(300); return [...document.querySelectorAll('.grid tbody td')].map(td => td.textContent); });
 
   const pg = { name: 'Shop — staging', engine: 'postgres', env: 'staging', host: '127.0.0.1', port: 55432, user: 'postgres', password: 'strata', database: 'shop', sslMode: 'prefer' };

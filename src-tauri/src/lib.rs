@@ -82,6 +82,12 @@ async fn db_connect(window: Window, state: State<'_, AppState>, id: String) -> R
         state.store.reset_demo()?;
     }
     let (mut driver, tunnel) = Driver::connect(&state.store.config(&conn)?, state.store.known_hosts()).await?;
+    // Every statement the driver sends goes to this window's query log, stamped with when it was sent.
+    let (app, label) = (window.app_handle().clone(), window.label().to_string());
+    driver.set_logger(Arc::new(move |sql: &str| {
+        let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+        let _ = app.emit_to(label.as_str(), "sql-log", json!({ "at": at, "sql": sql }));
+    }));
     let info = driver.info().await?;
     state.cancels.lock().unwrap().insert(window.label().to_string(), driver.canceller());
     state.sessions.lock().await.insert(window.label().to_string(), Arc::new(Mutex::new(Session { driver, _tunnel: tunnel })));
@@ -587,6 +593,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &it("pane-history", "Query History", Some("CmdOrCtrl+Y"))?,
             &PredefinedMenuItem::separator(app)?,
             &it("inspector", "Toggle Inspector", Some("CmdOrCtrl+I"))?,
+            &it("query-log", "Toggle Query Log", Some("CmdOrCtrl+Shift+L"))?,
             &it("sidebar", "Toggle Sidebar", Some("CmdOrCtrl+0"))?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, None)?,

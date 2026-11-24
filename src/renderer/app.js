@@ -1182,7 +1182,7 @@ function renderHistoryPane() {
     const d = dayLabel(it.at);
     if (d !== day) { h += `<div class="side-label">${esc(d)}</div>`; day = d; }
     const time = new Date(it.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-    h += `<button class="side-item hist${it.ok ? '' : ' failed'}" data-hist="${i}" title="${esc(it.sql)}"><span class="si-name"><span class="hi-sql">${esc(it.sql.replace(/^--[^\n]*\n/, '').replace(/\s+/g, ' ').trim())}</span><span class="hi-meta"><span>${time}</span>${it.ok ? (it.ms ? `<span>${fmtMs(it.ms)}</span>` : '') : '<span class="hi-bad">failed</span>'}</span></span></button>`;
+    h += `<button class="side-item hist${it.ok ? '' : ' failed'}" data-hist="${i}" title="${esc(it.sql)}"><span class="si-name"><span class="hi-sql">${highlight(it.sql.replace(/^--[^\n]*\n/, '').replace(/\s+/g, ' ').trim())}</span><span class="hi-meta"><span>${time}</span>${it.ok ? (it.ms ? `<span>${fmtMs(it.ms)}</span>` : '') : '<span class="hi-bad">failed</span>'}</span></span></button>`;
   }
   $('#sideList').innerHTML = h || `<div class="side-empty">${S.history.length ? 'Nothing in the history matches.' : 'Every query you run and every commit is kept here.'}</div>`;
   $('#sideFoot').innerHTML = S.history.length ? `<button class="btn foot-btn danger" data-side="clear-history">${ic('trash')}Clear history</button>` : '';
@@ -2124,6 +2124,62 @@ function toggleInspector() {
   renderInspector();
 }
 
+/* ---------- query log ---------- */
+/* Every statement the driver sends (the grid's pages and counts, the structure reads, your queries, the commits)
+   with the time it went out, under the workspace. Its height and whether it shows are remembered. */
+const LOG = { entries: [], max: 2000, shown: store.get('console', false), height: store.get('consoleH', 220) };
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+const logTime = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`; };
+const logEntryHTML = e => `<div class="log-entry"><div class="log-at">-- ${logTime(e.at)}</div><pre class="log-sql">${highlight(e.sql.trim().replace(/;?$/, ';'))}</pre></div>`;
+
+function addLog(entry) {
+  LOG.entries.push(entry);
+  const over = LOG.entries.length - LOG.max;
+  if (over > 0) LOG.entries.splice(0, over);
+  if (!LOG.shown) return;
+  const el = $('#consoleLog');
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  el.insertAdjacentHTML('beforeend', logEntryHTML(entry));
+  while (el.childElementCount > LOG.max) el.firstElementChild.remove();
+  if (atBottom) el.scrollTop = el.scrollHeight;
+  $('#consoleCount').textContent = plural(LOG.entries.length, 'statement');
+}
+
+function renderConsole() {
+  const box = $('#console');
+  if (!box) return;
+  box.hidden = $('#consoleSplit').hidden = !LOG.shown;
+  $('#consoleBtn').classList.toggle('on', LOG.shown);
+  if (!LOG.shown) return;
+  box.style.height = LOG.height + 'px';
+  const el = $('#consoleLog');
+  el.innerHTML = LOG.entries.length ? LOG.entries.map(logEntryHTML).join('') : '<div class="log-empty">Statements appear here as Trellis sends them.</div>';
+  el.scrollTop = el.scrollHeight;
+  $('#consoleCount').textContent = plural(LOG.entries.length, 'statement');
+}
+
+function toggleConsole() {
+  LOG.shown = !LOG.shown;
+  store.set('console', LOG.shown);
+  renderConsole();
+}
+
+function wireConsole() {
+  api.onSqlLog(e => { if ($('#consoleLog .log-empty')) $('#consoleLog').innerHTML = ''; addLog(e); });
+  $('#consoleBtn').onclick = toggleConsole;
+  $('#consoleClear').onclick = () => { LOG.entries = []; renderConsole(); };
+  // Dragging the line above the log sets its height; the grid above keeps at least 160 pixels.
+  $('#consoleSplit').addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const box = $('#console'), y0 = e.clientY, h0 = box.offsetHeight, max = $('#workspace').clientHeight - 160;
+    const move = ev => { LOG.height = Math.max(80, Math.min(max, h0 - (ev.clientY - y0))); box.style.height = LOG.height + 'px'; };
+    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); store.set('consoleH', LOG.height); };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+  });
+  renderConsole();
+}
+
 /* ---------- events ---------- */
 function wireWorkspace() {
   $('#connBtn').onclick = () => (S.conn ? showConnMenu() : showOpenConnection());
@@ -2379,6 +2435,7 @@ function onMenu(action) {
     case 'add-row': return addRow();
     case 'refresh': return refresh();
     case 'inspector': return toggleInspector();
+    case 'query-log': return toggleConsole();
     case 'sidebar': S.sidebar = !S.sidebar; return renderToolbar();
     case 'pane-items': return setPane('items');
     case 'pane-queries': return setPane('queries');
@@ -2535,6 +2592,7 @@ async function boot() {
     return;
   }
   wireWorkspace();
+  wireConsole();
   api.onMenu(onMenu);
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && overlayOpen()) { e.preventDefault(); closeOverlay(); }
@@ -2558,7 +2616,7 @@ async function boot() {
   if (connect) await connectTo(connect);
   else await showOpenConnection();
   if (info.selftest) { const sc = document.createElement('script'); sc.src = 'selftest.js'; document.body.appendChild(sc); }
-  window.__trellis = { S, stopQuery, exportTab, cellMenu, connectTo, openTable, newQueryTab, runActive, reviewChanges, showPalette, selectCell, startEdit, stageEdit, refreshGrid, cur, setSchema, setPane, saveQuery, openQueryText, openManager, showConnMenu, showOpenConnection, showConnForm, blankForm };
+  window.__trellis = { S, LOG, toggleConsole, stopQuery, exportTab, cellMenu, connectTo, openTable, newQueryTab, runActive, reviewChanges, showPalette, selectCell, startEdit, stageEdit, refreshGrid, cur, setSchema, setPane, saveQuery, openQueryText, openManager, showConnMenu, showOpenConnection, showConnForm, blankForm };
 }
 
 boot();

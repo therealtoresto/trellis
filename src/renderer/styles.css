@@ -1406,3 +1406,18 @@ html.mac .start-bar { padding-left: 86px; }
 /* With the window's own vibrancy behind them, the main panels need no blur of their own: theirs only blurred the
    ambient gradient, and redrew it on every frame of a resize. */
 html.vibrant .toolbar, html.vibrant .sidebar, html.vibrant .workspace, html.vibrant .inspector { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* ---------- query log ---------- */
+/* Under the workspace: every statement sent to the server, its time as a comment above it, highlighted like the
+   editor. The line above it drags its height. */
+.console-split { flex: none; height: 7px; cursor: row-resize; border-top: 1px solid var(--line); position: relative; }
+.console-split::after { content: ''; position: absolute; left: 50%; top: 2px; width: 36px; height: 3px; margin-left: -18px; border-radius: 3px; background: var(--line-strong); transition: background-color .14s; }
+.console-split:hover::after { background: var(--accent); }
+.console { flex: none; display: flex; flex-direction: column; min-height: 80px; background: color-mix(in srgb, var(--fg) 3%, transparent); }
+.console-log { flex: 1; min-height: 0; overflow: auto; padding: 6px 14px 10px; font: 12px/1.55 var(--mono); outline: none; user-select: text; -webkit-user-select: text; }
+.log-entry + .log-entry { margin-top: 10px; }
+.log-at { color: var(--syn-com); }
+.log-sql { margin: 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
+.log-empty { color: var(--faint); font: 12px var(--sans); padding: 6px 0; }
+.console-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 3px 8px 4px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); }
+.console-count { font-variant-numeric: tabular-nums; }

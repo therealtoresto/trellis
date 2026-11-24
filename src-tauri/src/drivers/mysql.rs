@@ -14,6 +14,7 @@ const APPROX_OVER: i64 = 200_000;
 
 pub struct My {
     conn: Conn,
+    pub(crate) log: Option<Logger>,
     /// How this connection was opened, for the second connection that cancels a statement.
     opts: mysql_async::Opts,
     database: Option<String>,
@@ -93,7 +94,7 @@ impl My {
                 Ok(Ok(mut conn)) => {
                     let sql_mode: Option<String> = conn.query_first("SELECT @@SESSION.sql_mode").await.map_err(my_err)?;
                     let backslash = !sql_mode.unwrap_or_default().contains("NO_BACKSLASH_ESCAPES");
-                    return Ok(My { conn, opts, database, d: Dialect::Mysql { backslash } });
+                    return Ok(My { conn, log: None, opts, database, d: Dialect::Mysql { backslash } });
                 }
                 Ok(Err(e)) => last = my_err(e),
                 Err(_) => last = "The server did not answer within 10 seconds.".into(),
@@ -102,12 +103,24 @@ impl My {
         Err(last)
     }
 
+    async fn exec(&mut self, sql: &str) -> Result<(), mysql_async::Error> {
+        self.note(sql);
+        self.conn.query_drop(sql).await
+    }
+
+    fn note(&self, sql: &str) {
+        if let Some(log) = &self.log {
+            log(sql);
+        }
+    }
+
     async fn sets(&mut self, sql: &str) -> R<Vec<Set>> {
         Ok(self.sets_capped(sql, usize::MAX).await?.0)
     }
 
     /// Each result set with at most `cap` rows (the rest are read and dropped); true when rows were dropped.
     async fn sets_capped(&mut self, sql: &str, cap: usize) -> R<(Vec<Set>, bool)> {
+        self.note(sql);
         let mut res = self.conn.query_iter(sql).await.map_err(my_err)?;
         let (mut out, mut truncated) = (Vec::new(), false);
         loop {
@@ -176,7 +189,9 @@ impl My {
     /// Without a database in the connection, the schema picker also sets the default for the SQL editor.
     pub async fn set_schema(&mut self, schema: &str) -> R<()> {
         if self.database.is_none() {
-            self.conn.query_drop(format!("USE {}", self.d.quote(schema))).await.map_err(my_err)?;
+            let sql = format!("USE {}", self.d.quote(schema));
+            self.note(&sql);
+            self.conn.query_drop(sql).await.map_err(my_err)?;
         }
         Ok(())
     }
@@ -326,14 +341,14 @@ impl My {
 
     pub async fn apply(&mut self, ch: &Changes) -> R<Vec<Statement>> {
         let st = change_statements(self.d, &self.table(&ch.r), ch);
-        self.conn.query_drop("START TRANSACTION").await.map_err(my_err)?;
+        self.exec("START TRANSACTION").await.map_err(my_err)?;
         for s in &st {
-            if let Err(e) = self.conn.query_drop(&s.sql).await {
-                let _ = self.conn.query_drop("ROLLBACK").await;
+            if let Err(e) = self.exec(&s.sql).await {
+                let _ = self.exec("ROLLBACK").await;
                 return Err(my_err(e));
             }
         }
-        self.conn.query_drop("COMMIT").await.map_err(my_err)?;
+        self.exec("COMMIT").await.map_err(my_err)?;
         Ok(st)
     }
 }

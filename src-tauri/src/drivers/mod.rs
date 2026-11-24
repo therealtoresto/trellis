@@ -13,6 +13,9 @@ use std::collections::BTreeMap;
 
 pub type R<T> = Result<T, String>;
 
+/// Hears every statement a driver sends to its server, its own reads included, for the window's query log.
+pub type Logger = std::sync::Arc<dyn Fn(&str) + Send + Sync>;
+
 pub fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
@@ -310,6 +313,9 @@ impl Driver {
     }
     pub fn canceller(&self) -> Canceller {
         each!(self, d => d.canceller())
+    }
+    pub fn set_logger(&mut self, log: Logger) {
+        each!(self, d => d.log = Some(log))
     }
     pub async fn info(&mut self) -> R<Info> {
         each!(self, d => d.info().await)
