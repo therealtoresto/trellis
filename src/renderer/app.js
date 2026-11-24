@@ -2647,6 +2647,8 @@ async function wireWelcome() {
 async function boot() {
   const info = await api.info().catch(() => ({ platform: 'web' }));
   if (info.platform === 'darwin') document.documentElement.classList.add('mac');
+  // Full screen has no window buttons, so the toolbar needs no room for them.
+  if (api.onFullscreen) api.onFullscreen(on => document.documentElement.classList.toggle('fullscreen', on));
   if (info.platform === 'darwin' && info.vibrancy) document.documentElement.classList.add('vibrant');
   fillIcons();
   if (api.placeLights) api.placeLights();

@@ -39,6 +39,8 @@
     copy: text => call('clipboard_write', { text }),
     info: () => call('app_info'),
     onMenu: fn => webview.listen('menu', e => fn(e.payload)),
+    // Says whether the window is full screen now and after every resize (entering or leaving full screen is one).
+    onFullscreen: fn => { const check = () => win.isFullscreen().then(fn, () => {}); check(); return win.onResized(check); },
     onSqlLog: fn => webview.listen('sql-log', e => fn(e.payload)),
     // `check` says whether to hold the close; held closes come back through `ask`.
     onCloseRequested: (check, ask) => win.onCloseRequested(e => { if (check()) { e.preventDefault(); ask(); } }),

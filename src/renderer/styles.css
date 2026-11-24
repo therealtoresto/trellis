@@ -1009,6 +1009,7 @@ input, textarea, .ddl, .modal-sql, .q-error code, .s-table td { user-select: tex
 .toolbar, .start-bar { -webkit-app-region: drag; }
 .toolbar button, .toolbar input, .toolbar .pending, .start-bar button { -webkit-app-region: no-drag; }
 html.mac .toolbar { padding-left: 94px; }
+html.mac.fullscreen .toolbar { padding-left: 8px; }
 html.mac .brand { padding-left: 0; }
 
 .env-tag[data-env="local"] { background: var(--glass-sheen), color-mix(in srgb, var(--env-local) 88%, transparent); }
@@ -1069,6 +1070,7 @@ html.env-production .toolbar { box-shadow: var(--glass-shadow), inset 0 1px 0 va
   border-radius: var(--r-lg);
 }
 html.mac .start-bar { padding-left: 86px; }
+html.mac.fullscreen .start-bar { padding-left: 8px; }
 .start-bar .brand { padding: 0; }
 .start-bar .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
 .start-grid {
