@@ -148,6 +148,29 @@ jobs:
       - name: Build ${{ env.VERSION }}
         run: ./node_modules/.bin/tauri build --bundles app --config "$UPDATER"
 
+      # The same self-signed certificate as local builds (MACOS_CERT_P12, base64, and MACOS_CERT_PASSWORD), so the
+      # signature stays the same from release to release and the Keychain keeps "Always Allow". The runner trusts the
+      # certificate for code signing only, in its throwaway system keychain. The updater's .tar.gz is then rebuilt
+      # from the signed app and signed again. Without the secrets the app keeps Tauri's ad-hoc signature.
+      - name: Sign the app
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERT_P12" ]; then echo "::warning::MACOS_CERT_P12 is not set; the app keeps an ad-hoc signature"; exit 0; fi
+          KC="$RUNNER_TEMP/signing.keychain-db"; KCPW=$(openssl rand -hex 12)
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security create-keychain -p "$KCPW" "$KC" && security set-keychain-settings "$KC" && security unlock-keychain -p "$KCPW" "$KC"
+          security import "$RUNNER_TEMP/signing.p12" -k "$KC" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPW" "$KC" > /dev/null
+          security find-certificate -c "Trellis Code Signing" -p "$KC" > "$RUNNER_TEMP/signing.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/signing.pem"
+          scripts/sign-macos.sh src-tauri/target/release/bundle/macos/Trellis.app "$KC"
+          cd src-tauri/target/release/bundle/macos
+          rm -f Trellis.app.tar.gz Trellis.app.tar.gz.sig
+          COPYFILE_DISABLE=1 tar -czf Trellis.app.tar.gz Trellis.app
+          "$GITHUB_WORKSPACE/node_modules/.bin/tauri" signer sign Trellis.app.tar.gz
+
       # The zip is for people (and Homebrew) and keeps one name across releases, so
       # releases/latest/download/Trellis_macos_arm64.zip is always the newest; the .tar.gz is for the updater.
       - name: Package the app

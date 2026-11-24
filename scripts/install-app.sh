@@ -4,6 +4,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ./node_modules/.bin/tauri build
+# With the project's signing keychain on this Mac, the app gets the same signature as every other build.
+SIGNING=~/.config/trellis-release/macos
+if [ -f "$SIGNING/signing.keychain-db" ]; then
+  scripts/sign-macos.sh src-tauri/target/release/bundle/macos/Trellis.app "$SIGNING/signing.keychain-db" "$(cat "$SIGNING/keychain-password.txt")" \
+    || echo "warning: not signed (is the certificate trusted for code signing? see README, Releasing)"
+fi
 APP=/Applications/Trellis.app
 BIN="$APP/Contents/MacOS/trellis"
 osascript -e 'tell application id "com.tarasbondaruk.trellis" to quit' >/dev/null 2>&1 || true
