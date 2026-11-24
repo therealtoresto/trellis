@@ -769,8 +769,17 @@ function fromFormatted(text, kind, orig) {
   return typeof orig === 'string' && norm(orig) === n ? orig : n;
 }
 
+// A column type as short as Postgres itself spells it: timestamp, timestamptz, varchar(255), float8. The header
+// shows this; its tooltip keeps the full name.
+const SHORT_TYPES = [[/^timestamp(\(\d+\))? without time zone/, 'timestamp$1'], [/^timestamp(\(\d+\))? with time zone/, 'timestamptz$1'], [/^time(\(\d+\))? without time zone/, 'time$1'], [/^time(\(\d+\))? with time zone/, 'timetz$1'], [/^character varying/, 'varchar'], [/^character/, 'char'], [/^double precision/, 'float8'], [/^bit varying/, 'varbit']];
+function shortType(type) {
+  let t = (type || '').toLowerCase().replace(/ (auto_increment|default_generated.*)$/, '');
+  for (const [re, to] of SHORT_TYPES) t = t.replace(re, to);
+  return t;
+}
+
 function defaultWidth(c, rows, i) {
-  let w = c.name.length * 7.4 + (c.type ? Math.min(c.type.length, 18) * 6.6 + 10 : 0) + (c.pk ? 18 : 0) + 34;
+  let w = c.name.length * 7.4 + (c.type ? Math.min(shortType(c.type).length, 14) * 6.6 + 10 : 0) + (c.pk ? 18 : 0) + 34;
   for (let k = 0; k < Math.min(rows.length, 40); k++) w = Math.max(w, Math.min(shown(rows[k].vals[i]).length, 48) * 7.1 + 24);
   return Math.round(Math.max(64, Math.min(w, 340)));
 }
@@ -876,7 +885,7 @@ function gridHTML(tab, m, win) {
   let h = `<table class="grid" style="width:${total}px"><colgroup><col style="width:52px">${m.cols.map((_, i) => `<col style="width:${tab.widths[i]}px">`).join('')}</colgroup><thead><tr><th class="rn"></th>`;
   m.cols.forEach((c, i) => {
     const s = tab.sort && tab.sort.ci === i ? tab.sort.dir : '';
-    const type = c.type ? c.type.toLowerCase().replace(/ (auto_increment|default_generated.*)$/, '') : '';
+    const type = shortType(c.type);
     const fk = fkOf(tab, i);
     h += `<th data-ci="${i}" title="${esc(c.name)}${c.type ? ' · ' + esc(c.type) : ''}"><div class="th-in">${c.pk ? ic('key', 'pk') : ''}${fk ? `<span class="th-fk" title="References ${esc(fk.table)}.${esc(fk.to)}">${ic('link')}</span>` : ''}<span class="th-name">${esc(c.name)}</span>${type ? `<span class="th-type">${esc(type)}</span>` : ''}<span class="th-sort">${s === 'ASC' ? '▲' : s === 'DESC' ? '▼' : ''}</span></div><span class="rz" data-rz="${i}"></span></th>`;
   });

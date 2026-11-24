@@ -570,8 +570,9 @@ kbd {
 }
 .grid thead th:hover { background: color-mix(in srgb, var(--head-solid) 92%, var(--accent)); }
 .th-in { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.th-name { overflow: hidden; text-overflow: ellipsis; }
-.th-type { font: 400 10.5px var(--mono); color: var(--faint); flex: none; }
+/* When the column is narrow the type gives way first (it shrinks a hundred times faster), so the name stays readable. */
+.th-name { flex: 0 1 auto; min-width: 2.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.th-type { font: 400 10.5px var(--mono); color: var(--faint); flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .th-sort { margin-left: auto; font-size: 9px; color: var(--accent); flex: none; }
 .th-in .pk { color: var(--modified); width: 13px; height: 13px; }
 .rz {

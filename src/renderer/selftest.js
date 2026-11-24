@@ -239,6 +239,20 @@
       return r;
     });
   };
+  // In a narrow column the type gives way, so the column's name stays readable.
+  const narrowHeader = async () => {
+    await step('narrow column keeps its name', async () => {
+      await T.openTable({ name: 'players' }); await sleep(300);
+      const tab = T.cur(), ci = tab.cols.findIndex(c => c.name === 'created_at');
+      tab.cols[ci] = { ...tab.cols[ci], type: 'timestamp without time zone' };
+      tab.widths[ci] = 120; T.refreshGrid(); await sleep(100);
+      const th = $(`#tabBody th[data-ci="${ci}"]`), name = th.querySelector('.th-name'), type = th.querySelector('.th-type');
+      const r = { type: type.textContent, nameCut: name.scrollWidth > name.clientWidth + 1, typeWidth: Math.round(type.getBoundingClientRect().width), title: th.title };
+      r.ok = r.type === 'timestamp' && !r.nameCut && /timestamp without time zone/.test(r.title);
+      await T.openTable({ name: 'players' });
+      return r;
+    });
+  };
   // Right-click menus on a cell, a header and a sidebar table; filtering by a cell narrows the table.
   const contextMenus = async () => {
     await step('context menus', async () => {
@@ -300,6 +314,7 @@
     await exports();
     await foreignKeys();
     await contextMenus();
+    await narrowHeader();
     await trellis.selftestLog('done');
     return trellis.selftestDone();
   }
@@ -344,6 +359,7 @@
   await exports();
   await foreignKeys();
   await contextMenus();
+  await narrowHeader();
   await step('blob cell', async () => { const t = T.newQueryTab("SELECT x'00ff' AS b, 9007199254740993 AS big, 1.5 AS f, NULL AS n"); T.runActive(); await sleep(300); return [...document.querySelectorAll('.grid tbody td')].map(td => td.textContent); });
 
   const pg = { name: 'Shop — staging', engine: 'postgres', env: 'staging', host: '127.0.0.1', port: 55432, user: 'postgres', password: 'strata', database: 'shop', sslMode: 'prefer' };
