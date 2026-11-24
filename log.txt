@@ -17,3 +17,26 @@ export a table and a result: {"total":240,"csvLines":241,"header":"id,username,e
 follow a foreign key: {"header":true,"shown":true,"inspector":true,"tab":"players","filter":{"col":"id","op":"=","val":"56"},"total":1,"id":56,"value":56,"ok":true}
 context menus: {"cell":["Copy value","Copy row as JSON","Copy row as INSERT","Copy column name “country”","Filter: country = IN","Filter: country ≠ IN","Edit cell","Set to NULL","Delete row"],"filtered":1,"allSame":true,"header":["Sort ascending","Sort descending","Copy name “country”","Filter on this column…"],"side":["Open","Open structure","SELECT * FROM events in a new query","Copy name","Copy qualified name"],"ok":true}
 done
+welcome lists connections: ["db.int8.smartico.ai local ","Example example "]
+welcome shows the build: ["Version 0.5.0 (49)","© 2026 Taras Bondaruk · MIT License"]
+welcome offers an update: {"ok":true,"text":"Update to 9.9.9","box":[72,314,134,25]}
+new connection form: {"title":"PostgreSQL Connection","buttonsInside":true,"fieldsScroll":true,"ok":true}
+sqlite connection form: {"title":"SQLite Connection","buttonsInside":true,"fieldsScroll":true,"ok":true}
+colors of other connections and a custom one: {"used":["#12a4b5","Used by ENV_8, ENV_3"],"names":["db.int8.smartico.ai","Example"],"picked":"#ff00aa","form":"#ff00aa","ok":true}
+ssh tunnel fields: {"fields":["sshHost","sshPort","sshUser","sshAuth","sshPassword"],"key":true,"title":"PostgreSQL Connection","buttonsInside":true,"fieldsScroll":true,"ok":true}
+lights welcome: OK bar middle 32, buttons [[32,32]], off by [0]
+windows at launch: [{"label":"welcome","visible":true}]
+workspace opened on Example: [{"label":"trellis-0","visible":true}]
+window may be dragged: "allowed"
+resize follows the window: {"median":49,"worst":66,"all":[42,42,45,45,45,48,48,49,49,50,50,50,51,51,65,66]}
+large result: {"ok":true,"drawn":50,"total":20000,"rowHeight":26,"middle":"row 10001","last":"row 20000","top":{"scrollTop":0,"cur":"row 1"},"jump":"row 15000","msPerScrollFrame":23.6,"worstFrame":51}
+json and arrays: {"grid":["txt json cur: {\"id\": 7, \"tags\": [\"a\", \"b\"], \"ok\": true, \"none\": null}","txt arr: 12a bNULL","txt: plain"],"keys":4,"tags":4,"inspector":["{\n  \"id\": 7,\n  \"tags\": [\n    \"a\",\n    \"b\"\n  ],\n  \"ok\": true,\n  \"none\": null\n}","{\n  1,\n  2,\n  \"a b\",\n  NULL\n}"],"types":["json · 4 keys","array · 4 items"],"aligned":[true,true],"hidden":false,"ok":true}
+stop a running query: {"button":"Stop⌘.","running":false,"msg":"Stopped","error":null,"ms":52,"after":"Run⌘↵","ok":true}
+run the statement at the caret: {"line1":{"label":"Run statement","band":true,"col":"first"},"line3":{"label":"Run statement","band":true,"col":"second"},"all":{"label":"Run statement","band":true,"col":"second"},"ok":true}
+autocomplete knows aliases and is not cut off: {"items":["id","username","email","country","level","xp","balance","vip"],"hidden":false,"overhang":144,"lastVisible":true,"ok":true}
+huge result is capped: {"rows":50000,"msg":"50,000 rows · the first 50,000 only · 31 ms","ok":true}
+export a table and a result: {"total":240,"csvLines":241,"header":"id,username,email,country,level,xp,balance,vip,created_at,la","json":240,"sql":240,"sqlFirst":"INSERT INTO \"players\" (\"id\", \"username\", \"email\", \"country\", \"level\", \"xp\", \"bal","qcsv":"n,s,j,x\n1,\"a,b\",\"{\"\"k\"\":1}\",1.23456789\n","qjson":[{"n":1,"s":"a,b","j":{"k":1},"x":1.23456789}],"ok":true}
+follow a foreign key: {"header":true,"shown":true,"inspector":true,"tab":"players","filter":{"col":"id","op":"=","val":"56"},"total":1,"id":56,"value":56,"ok":true}
+context menus: {"cell":["Copy value","Copy row as JSON","Copy row as INSERT","Copy column name “country”","Filter: country = IN","Filter: country ≠ IN","Edit cell","Set to NULL","Delete row"],"filtered":1,"allSame":true,"header":["Sort ascending","Sort descending","Copy name “country”","Filter on this column…"],"side":["Open","Open structure","SELECT * FROM events in a new query","Copy name","Copy qualified name"],"ok":true}
+narrow column keeps its name: {"type":"timestamp","nameCut":false,"typeWidth":27,"title":"created_at · timestamp without time zone","ok":true}
+done

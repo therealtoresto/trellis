@@ -1314,9 +1314,12 @@ html.mac .start-bar { padding-left: 86px; }
   height: 100%;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
+  /* One row the height of the window: a long list of connections scrolls inside it instead of pushing the side
+     panel's buttons and the hint line below the window's edge. */
+  grid-template-rows: minmax(0, 1fr);
 }
 .wl-side {
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; min-height: 0;
   padding: 56px 22px 22px;
   background: color-mix(in srgb, var(--fg) 4%, transparent);
   border-right: 1px solid var(--glass-edge-soft);
@@ -1356,11 +1359,11 @@ html.mac .start-bar { padding-left: 86px; }
 .wl-action:active { transform: scale(.98); }
 .wl-action .icon { color: var(--muted); width: 18px; height: 18px; }
 
-.wl-main { display: flex; flex-direction: column; min-width: 0; }
+.wl-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .wl-bar { display: flex; align-items: center; gap: 10px; height: 40px; margin: 12px 14px 8px; }
 .wl-search { flex: 1; height: 36px; }
 .wl-search input { font-size: 13.5px; }
-.wl-list { flex: 1; overflow-y: auto; padding: 4px 10px 8px; }
+.wl-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 10px 8px; }
 .wl-row { padding: 8px 12px; gap: 12px; }
 .wl-row .eng-badge { width: 36px; height: 36px; border-radius: 50%; font-size: 13px; letter-spacing: 0; }
 .wl-row .cc-name { font-size: 14px; }

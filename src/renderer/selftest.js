@@ -59,6 +59,16 @@
     };
     await step('new connection form', async () => { $('.wl-action[data-wl="new"]').click(); return formFits(); });
     await step('sqlite connection form', async () => { const i = T.W.list.findIndex(c => c.engine === 'sqlite'); $$('.wl-row [data-edit]')[i].click(); return formFits(); });
+    await step('long connection list scrolls inside the window', async () => {
+      const list = $('#wlList'), row = list.querySelector('.wl-row');
+      for (let i = 0; i < 14; i++) list.appendChild(row.cloneNode(true));
+      await sleep(50);
+      const btn = $('.wl-action[data-wl="sqlite"]').getBoundingClientRect(), foot = $('.wl-foot').getBoundingClientRect();
+      const r = { windowH: innerHeight, buttonBottom: Math.round(btn.bottom), footBottom: Math.round(foot.bottom), scrolls: list.scrollHeight > list.clientHeight };
+      T.renderWelcome();
+      r.ok = r.scrolls && r.buttonBottom <= innerHeight - 16 && r.footBottom <= innerHeight;
+      return r;
+    });
     await step('colors of other connections and a custom one', async () => {
       const saved = T.S.conns;
       T.S.conns = [...saved, { id: 'x1', name: 'ENV_8', engine: 'postgres', color: '#12A4B5' }, { id: 'x2', name: 'ENV_3', engine: 'postgres', color: '#12a4b5' }];
