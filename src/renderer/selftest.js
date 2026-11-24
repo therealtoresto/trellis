@@ -67,10 +67,11 @@
       const p = document.querySelector('#cfColor'); p.value = '#ff00aa';
       p.dispatchEvent(new Event('input', { bubbles: true })); p.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150);
       const on = document.querySelector('.swatch.on');
-      const r = { used: sw.find(s => s[0] === '#12a4b5'), picked: on && on.dataset.color, form: T.S.form && T.S.form.color };
+      const names = (await trellis.connections()).map(c => c.name);
+      const r = { used: sw.find(s => s[0] === '#12a4b5'), names, picked: on && on.dataset.color, form: T.S.form && T.S.form.color };
       T.S.conns = saved;
       document.querySelector('[data-cf="cancel"]').click();
-      r.ok = !!r.used && r.used[1] === 'Used by ENV_8, ENV_3' && r.picked === '#ff00aa' && r.form === '#ff00aa';
+      r.ok = !!r.used && r.used[1] === 'Used by ENV_8, ENV_3' && names.every((n, i) => i === 0 || names[i - 1].localeCompare(n, undefined, { numeric: true, sensitivity: 'base' }) <= 0) && r.picked === '#ff00aa' && r.form === '#ff00aa';
       return r;
     });
     await step('ssh tunnel fields', async () => {

@@ -8,7 +8,8 @@
   const webview = T.webviewWindow.getCurrentWebviewWindow();
 
   window.trellis = {
-    connections: () => call('conns_list'),
+    // Every list of connections reads by name, numbers in order: Smartico 2, Smartico 3 … Smartico 10.
+    connections: () => call('conns_list').then(list => list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' }))),
     saveConnection: form => call('conns_save', { form }),
     deleteConnection: id => call('conns_delete', { id }),
     testConnection: form => call('conns_test', { form }),
