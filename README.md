@@ -8,7 +8,7 @@ Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScr
 - **Welcome window** — what Trellis opens with, as in TablePlus: the logo, version and developer on the left, saved
   connections on the right (search, `↵` to open, right-click to edit, duplicate or delete). A connection opens in its
   own workspace window; closing the last one brings the welcome window back (also Window → Welcome, `⌘⇧1`).
-- **Connections** — also opened from the Open Connection sheet (`⌘⇧K`) inside a workspace; each has a status color, a tag (local,
+- **Connections** — also opened from the Open Connection sheet (`⌘⇧K`) inside a workspace; each has a status color (the standard ones, those other connections already use, or any color from the picker), a tag (local,
   development, staging, production), a safe mode (silent, ask before any write, read only) and an SSL mode
   (disable, prefer, require, verify-full). A server connection can go through an **SSH tunnel**, signing in with the
   SSH agent or `~/.ssh` keys, a key file (with its passphrase) or a password; the database host and port are then as

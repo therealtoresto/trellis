@@ -1283,7 +1283,11 @@ html.mac .start-bar { padding-left: 86px; }
 .cf-port .cf-input { width: 100%; }
 .cf-select { padding-right: 6px; flex: 1; min-width: 0; }
 .cf-box .cf-input { height: 28px; border-radius: 8px; }
-.swatches { display: flex; gap: 6px; flex: 1; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+/* The last swatch opens the system color picker for a custom color. */
+.swatch-add { position: relative; display: grid; place-items: center; overflow: hidden; color: var(--muted); background: color-mix(in srgb, var(--fg) 8%, transparent); box-shadow: inset 0 0 0 1px var(--glass-edge-soft); }
+.swatch-add .icon { width: 12px; height: 12px; }
+.swatch-add input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: default; border: 0; padding: 0; }
 .swatch {
   width: 26px; height: 20px; border-radius: 6px;
   border: 0; padding: 0;

@@ -59,6 +59,20 @@
     };
     await step('new connection form', async () => { $('.wl-action[data-wl="new"]').click(); return formFits(); });
     await step('sqlite connection form', async () => { const i = T.W.list.findIndex(c => c.engine === 'sqlite'); $$('.wl-row [data-edit]')[i].click(); return formFits(); });
+    await step('colors of other connections and a custom one', async () => {
+      const saved = T.S.conns;
+      T.S.conns = [...saved, { id: 'x1', name: 'ENV_8', engine: 'postgres', color: '#12A4B5' }, { id: 'x2', name: 'ENV_3', engine: 'postgres', color: '#12a4b5' }];
+      T.showConnForm(T.blankForm()); await sleep(150);
+      const sw = [...document.querySelectorAll('.swatch[data-color]')].map(b => [b.dataset.color, b.title]);
+      const p = document.querySelector('#cfColor'); p.value = '#ff00aa';
+      p.dispatchEvent(new Event('input', { bubbles: true })); p.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150);
+      const on = document.querySelector('.swatch.on');
+      const r = { used: sw.find(s => s[0] === '#12a4b5'), picked: on && on.dataset.color, form: T.S.form && T.S.form.color };
+      T.S.conns = saved;
+      document.querySelector('[data-cf="cancel"]').click();
+      r.ok = !!r.used && r.used[1] === 'Used by ENV_8, ENV_3' && r.picked === '#ff00aa' && r.form === '#ff00aa';
+      return r;
+    });
     await step('ssh tunnel fields', async () => {
       $('.wl-action[data-wl="new"]').click(); await sleep(150);
       const box = $('#cf-ssh'); box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(100);

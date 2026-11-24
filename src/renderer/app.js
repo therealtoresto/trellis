@@ -83,6 +83,20 @@ const sslOf = c => c.sslMode || (c.ssl ? 'require' : 'prefer');
 const safeMode = () => safeOf(S.conn);
 const colorOf = c => c.color || { local: '#2e9a55', dev: '#2f6fe4', staging: '#e8963c', production: '#a3262a' }[c.env || 'local'];
 
+// The colors to pick from: the standard ones, then those other saved connections already wear (so a new ENV_8 can
+// match the old one), then the form's own custom color. Each says which connections use it.
+function palette(f) {
+  const norm = c => String(c || '').toLowerCase();
+  const used = new Map();
+  for (const c of S.conns || []) {
+    if (c.id === f.id) continue;
+    const k = norm(colorOf(c));
+    used.set(k, [...(used.get(k) || []), c.name]);
+  }
+  const keys = [...new Set([...COLORS.map(norm), ...used.keys(), norm(f.color)])].filter(k => /^#[0-9a-f]{6}$/.test(k));
+  return keys.map(k => ({ color: k, title: used.has(k) ? `Used by ${used.get(k).join(', ')}` : COLORS.map(norm).includes(k) ? k : `Custom ${k}` }));
+}
+
 function blankForm(engine = 'postgres') {
   return { name: '', engine, env: 'local', color: COLORS[3], safeMode: 'silent', sslMode: 'prefer', host: '127.0.0.1', port: ENGINE[engine].port || '', user: ENGINE[engine].user || '', database: '', file: '' };
 }
@@ -190,7 +204,7 @@ function showConnForm(form, fromList = false) {
       <label class="cf-label" for="cf-name">Name</label><div class="cf-span">${input('name', { ph: server ? 'ENV_8' : 'Notes' })}</div>
       <span class="cf-label">Status color</span>
       <div class="cf-row">
-        <div class="swatches">${COLORS.map(c => `<button class="swatch${f.color === c ? ' on' : ''}" data-color="${c}" style="--sw:${c}" aria-label="Color ${c}"></button>`).join('')}</div>
+        <div class="swatches">${palette(f).map(p => `<button class="swatch${String(f.color).toLowerCase() === p.color ? ' on' : ''}" data-color="${p.color}" style="--sw:${p.color}" title="${esc(p.title)}" aria-label="Color ${esc(p.title)}"></button>`).join('')}<label class="swatch swatch-add" title="Custom color…" aria-label="Custom color">${ic('plus')}<input type="color" id="cfColor" value="${esc(/^#[0-9a-f]{6}$/i.test(f.color) ? f.color : '#2f6fe4')}"></label></div>
         <label class="cf-label inline" for="cf-env">Tag</label>${select('env', { local: 'local', dev: 'development', staging: 'staging', production: 'production' })}
       </div>
       <span class="cf-label">Icon</span>
@@ -238,7 +252,12 @@ function showConnForm(form, fromList = false) {
     const k = e.target.dataset.k;
     if (k && e.target.type !== 'checkbox') f[k] = e.target.value;
   });
+  // The custom color follows the picker live, and is kept as a swatch of its own once chosen.
+  const picker = $('#cfColor', sheet);
+  picker.addEventListener('input', () => { f.color = picker.value; $('#cfIcons', sheet).style.setProperty('--status', f.color); $$('.swatch.on', sheet).forEach(x => x.classList.remove('on')); });
+  picker.addEventListener('change', () => { f.color = picker.value.toLowerCase(); showConnForm(f, fromList); });
   sheet.addEventListener('change', e => {
+    if (e.target === picker) return;
     const k = e.target.dataset.k;
     if (!k) return;
     f[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
@@ -296,7 +315,7 @@ function showConnForm(form, fromList = false) {
       return showConnForm(f, fromList);
     }
     const sw = e.target.closest('[data-color]');
-    if (sw) { f.color = sw.dataset.color; $$('.swatch', sheet).forEach(x => x.classList.toggle('on', x === sw)); $('#cfIcons', sheet).style.setProperty('--status', f.color); return; }
+    if (sw && sw.dataset.color) { f.color = sw.dataset.color; $$('.swatch', sheet).forEach(x => x.classList.toggle('on', x === sw)); $('#cfIcons', sheet).style.setProperty('--status', f.color); return; }
     const ip = e.target.closest('[data-iconpick]');
     if (ip) { f.icon = ip.dataset.iconpick === 'auto' ? null : ip.dataset.iconpick; $$('.icon-opt', sheet).forEach(x => x.classList.toggle('on', x === ip)); return; }
     const b = e.target.closest('[data-cf]');
