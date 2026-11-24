@@ -53,8 +53,6 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # the build number is the commit count
 
       # Ubuntu's packages come from the kernel.org mirror (a CDN) rather than the runner's own list, whose Azure mirror
       # stopped resolving and turned this step into an hour. Only what the build needs is installed, not the
@@ -106,7 +104,7 @@ jobs:
           TRELLIS_SELFTEST="$PWD/smoke" TRELLIS_SELFTEST_ONLY=grid TRELLIS_USERDATA="$(mktemp -d)" \
             timeout 180 xvfb-run -a src-tauri/target/release/trellis || true
           cat smoke/log.txt
-          grep -q "^welcome shows the build: \[\"Version $VERSION " smoke/log.txt
+          grep -q "^welcome shows the version: \[\"Version $VERSION\"" smoke/log.txt
           grep -q '^workspace opened on Example' smoke/log.txt
           grep -q '^large result: {"ok":true' smoke/log.txt
           grep -q '^json and arrays: {.*"ok":true}$' smoke/log.txt
@@ -129,8 +127,6 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -196,8 +192,6 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -225,7 +219,7 @@ jobs:
           TRELLIS_SELFTEST="$(cygpath -w "$PWD/smoke")" TRELLIS_SELFTEST_ONLY=grid TRELLIS_USERDATA="$(cygpath -w "$(mktemp -d)")" \
             timeout 180 src-tauri/target/release/trellis.exe || true
           cat smoke/log.txt
-          grep -q "^welcome shows the build: \[\"Version $VERSION " smoke/log.txt
+          grep -q "^welcome shows the version: \[\"Version $VERSION\"" smoke/log.txt
           grep -q '^workspace opened on Example' smoke/log.txt
           grep -q '^large result: {"ok":true' smoke/log.txt
           grep -q '^done' smoke/log.txt

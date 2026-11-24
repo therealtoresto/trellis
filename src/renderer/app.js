@@ -2597,7 +2597,7 @@ async function offerUpdate() {
 async function wireWelcome() {
   const about = await api.about().catch(() => null);
   if (about) {
-    $('#wlVersion').textContent = `Version ${about.version}${about.build ? ` (${about.build})` : ''}`;
+    $('#wlVersion').textContent = `Version ${about.version}`;
     $('#wlDev').textContent = `© ${about.year} ${(about.developer || '').split(':')[0]} · ${about.license} License`;
   }
   offerUpdate();

@@ -5,10 +5,7 @@ fn output(cmd: &str, args: &[&str]) -> String {
 }
 
 fn main() {
-    // The welcome window shows a build number, counted from the commits, as in "Version 0.2.0 (4)".
-    println!("cargo:rustc-env=TRELLIS_BUILD={}", output("git", &["rev-list", "--count", "HEAD"]));
+    // The build date gives the year in the welcome window's copyright line.
     println!("cargo:rustc-env=TRELLIS_BUILT={}", output("date", &["+%Y-%m-%d"]));
-    println!("cargo:rerun-if-changed=../.git/HEAD");
-    println!("cargo:rerun-if-changed=../.git/refs/heads");
     tauri_build::build()
 }

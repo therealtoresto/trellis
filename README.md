@@ -133,8 +133,7 @@ It sets the version in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tau
 commit `v<version>` and pushes both. The tag starts [the workflow](.github/workflows/build.yml): it builds Ubuntu and
 macOS and Windows, opens the Ubuntu and Windows builds as a smoke test, and when all pass publishes the release with the
 `.deb`, the `.AppImage`, the zipped macOS app (`Trellis_macos_arm64.zip`, one name for every release), the signed
-update files and the apt repository, its notes listing the commits since the last one. The welcome window
-shows the version and the build number (the commit count), as in `Version 0.2.1 (18)`. To get the files without a
+update files and the apt repository, its notes listing the commits since the last one. To get the files without a
 release, run the Build workflow from the Actions tab: they appear under the run's Artifacts.
 
 Two signing keys live as repository secrets, with their backups outside the repository (`~/.config/trellis-release`

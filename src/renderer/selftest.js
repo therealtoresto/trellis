@@ -36,7 +36,7 @@
     }
     phase('');
     await step('welcome lists connections', async () => [...document.querySelectorAll('.wl-row .cc-name')].map(x => x.innerText.replace(/\s+/g, ' ')));
-    await step('welcome shows the build', async () => [$('#wlVersion').textContent, $('#wlDev').textContent]);
+    await step('welcome shows the version', async () => [$('#wlVersion').textContent, $('#wlDev').textContent]);
     await step('welcome offers an update', async () => {
       // The real check is off in test builds; a pretend release shows where the button goes.
       const real = trellis.updateCheck;

@@ -9,6 +9,10 @@ set -euo pipefail
 APP=$1
 KC=$2
 [ -n "${3:-}" ] && security unlock-keychain -p "$3" "$KC"
+# codesign finds an identity only in a keychain on the search list, whatever --keychain says: add ours for the
+# signing and put the list back afterwards.
+LIST=$(security list-keychains -d user | tr -d '"' | xargs)
+case " $LIST " in *" $KC "*) ;; *) security list-keychains -d user -s $LIST "$KC"; trap 'security list-keychains -d user -s $LIST' EXIT ;; esac
 codesign --force --deep --timestamp=none --keychain "$KC" -s "Trellis Code Signing" "$APP"
 codesign --verify --deep --strict "$APP" 2>/dev/null || true
 codesign -d -r- "$APP" 2>&1 | grep designated
