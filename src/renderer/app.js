@@ -2192,7 +2192,15 @@ function toggleInspector() {
 const LOG = { entries: [], max: 2000, shown: store.get('console', false), height: store.get('consoleH', 220) };
 const pad = (n, w = 2) => String(n).padStart(w, '0');
 const logTime = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`; };
-const logEntryHTML = e => `<div class="log-entry"><div class="log-at">-- ${logTime(e.at)}</div><pre class="log-sql">${highlight(e.sql.trim().replace(/;?$/, ';'))}</pre></div>`;
+// Statements written inside Trellis' own code carry that code's indentation on every line but the first: take off
+// what the lines share, so they read from the left edge.
+function dedent(sql) {
+  const lines = sql.replace(/\t/g, '    ').trim().split('\n');
+  const rest = lines.slice(1).filter(l => l.trim());
+  const cut = rest.length ? Math.min(...rest.map(l => l.match(/^ */)[0].length)) : 0;
+  return [lines[0], ...lines.slice(1).map(l => l.slice(Math.min(cut, l.match(/^ */)[0].length)))].join('\n');
+}
+const logEntryHTML = e => `<div class="log-entry"><div class="log-at">-- ${logTime(e.at)}</div><pre class="log-sql">${highlight(dedent(e.sql).replace(/;?$/, ';'))}</pre></div>`;
 
 function addLog(entry) {
   LOG.entries.push(entry);

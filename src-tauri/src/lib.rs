@@ -435,6 +435,10 @@ fn create_welcome(app: &AppHandle) -> R<()> {
     if devtools() {
         w.open_devtools();
     }
+    let zoom = *ZOOM.lock().unwrap();
+    if zoom != 1.0 {
+        let _ = w.set_zoom(zoom);
+    }
     lights::place_settled(&w);
     Ok(())
 }
@@ -478,6 +482,32 @@ fn selftest_resize(window: Window, width: f64, height: f64) -> R<()> {
 fn selftest_done(app: AppHandle) {
     if std::env::var("TRELLIS_KEEP").is_err() {
         app.exit(0);
+    }
+}
+
+/* ---------- zoom ---------- */
+
+/// The zoom of every workspace window (⌘+ / ⌘− / ⌘⇧0), kept across launches. The welcome window keeps its size.
+static ZOOM: std::sync::Mutex<f64> = std::sync::Mutex::new(1.0);
+
+fn load_zoom(app: &AppHandle) {
+    let file = app.state::<AppState>().store.zoom_file();
+    if let Some(z) = std::fs::read_to_string(file).ok().and_then(|s| s.trim().parse::<f64>().ok()) {
+        *ZOOM.lock().unwrap() = z.clamp(0.5, 2.0);
+    }
+}
+
+fn zoom_by(app: &AppHandle, step: Option<f64>) {
+    let z = {
+        let mut z = ZOOM.lock().unwrap();
+        *z = match step { Some(s) => ((*z + s) * 10.0).round() / 10.0, None => 1.0 }.clamp(0.5, 2.0);
+        *z
+    };
+    let _ = std::fs::write(app.state::<AppState>().store.zoom_file(), z.to_string());
+    for (label, w) in app.webview_windows() {
+        if label.starts_with("trellis-") {
+            let _ = w.set_zoom(z);
+        }
     }
 }
 
@@ -601,6 +631,10 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &it("query-log", "Toggle Query Log", Some("CmdOrCtrl+Shift+L"))?,
             &it("sidebar", "Toggle Sidebar", Some("CmdOrCtrl+0"))?,
             &PredefinedMenuItem::separator(app)?,
+            &it("zoom-in", "Zoom In", Some("CmdOrCtrl+="))?,
+            &it("zoom-out", "Zoom Out", Some("CmdOrCtrl+-"))?,
+            &it("zoom-reset", "Actual Size", Some("CmdOrCtrl+Shift+0"))?,
+            &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, None)?,
         ],
     )?;
@@ -643,6 +677,7 @@ pub fn run() {
             };
             let demo = app.path().resolve("gamification_demo.sqlite", tauri::path::BaseDirectory::Resource)?;
             app.manage(AppState { store: Store::new(dir, demo), sessions: Mutex::new(HashMap::new()), cancels: Default::default() });
+            load_zoom(&handle);
             app.set_menu(build_menu(&handle)?)?;
             app.on_menu_event(|app, event| {
                 let id = event.id().as_ref().to_string();
@@ -650,6 +685,9 @@ pub fn run() {
                     "new-window" => { let _ = create_window(app, None); }
                     "welcome" => { let _ = create_welcome(app); }
                     "check-updates" => check_updates_from_menu(app),
+                    "zoom-in" => zoom_by(app, Some(0.1)),
+                    "zoom-out" => zoom_by(app, Some(-0.1)),
+                    "zoom-reset" => zoom_by(app, None),
                     "close-window" => { if let Some(w) = focused(app) { let _ = w.close(); } }
                     _ => {
                         if let Some(w) = focused(app) {

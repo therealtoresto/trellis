@@ -303,12 +303,13 @@
         page: texts.some(t => /FROM "missions"/.test(t)), mine: texts.some(t => /from the log/.test(t)),
         stamped: /^-- \d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}$/.test(log.querySelector('.log-at').textContent),
         highlighted: !!log.querySelector('.log-sql .t-kw'), height: document.querySelector('#console').offsetHeight,
+        dedented: texts.every(t => !/\n {12,}\S/.test(t)),
       };
       T.setPane('history'); await sleep(100);
       r.history = !!document.querySelector('#sideList .hi-sql .t-kw');
       T.setPane('items');
       T.toggleConsole(); r.hidden = document.querySelector('#console').hidden;
-      r.ok = r.shown && r.page && r.mine && r.stamped && r.highlighted && r.history && r.hidden && r.height >= 80;
+      r.ok = r.shown && r.page && r.mine && r.stamped && r.highlighted && r.dedented && r.history && r.hidden && r.height >= 80;
       return r;
     });
   };

@@ -25,6 +25,11 @@ impl Store {
         self.dir.join("connections.json")
     }
 
+    /// The zoom of the workspace windows, as a factor (1 is 100%).
+    pub fn zoom_file(&self) -> PathBuf {
+        self.dir.join("zoom")
+    }
+
     /// SSH servers Trellis has met, besides ~/.ssh/known_hosts.
     pub fn known_hosts(&self) -> PathBuf {
         self.dir.join("known_hosts")

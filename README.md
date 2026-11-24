@@ -40,6 +40,8 @@ Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScr
 - **Export** (`⌘⇧E`) — copy a page or a result as CSV or JSON, or save it to a file: a query result as CSV or JSON,
   a whole table (as filtered and sorted) as CSV, JSON or SQL `INSERT`s, read and written 5,000 rows at a time.
 - **Sidebar panes** — Items, saved Queries and the History of every query and commit, per connection. History is highlighted like the editor.
+- **Zoom** — `⌘+` and `⌘−` scale a whole workspace window (every one of them, remembered across launches), `⌘⇧0`
+  returns to 100%.
 - **Query log** (`⌘⇧L`, or the button at the right of the toolbar) — a pane under the workspace with every statement
   Trellis sends to the server, your queries and its own reads (pages, counts, structure) alike, each under the time it
   went out and highlighted. Drag its top edge to resize it; it remembers its height and whether it shows.
