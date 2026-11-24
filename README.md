@@ -30,6 +30,9 @@ Rust (Tauri 2) talks to the databases; the window is plain HTML, CSS and JavaScr
 - **Foreign keys** — a link mark in the column header; the arrow in a cell (on hover or in the selected row) or the
   link in the inspector opens the referenced table filtered to that row.
 - **Structure** — columns, indexes, foreign keys and the definition (`⌘2`).
+- **Functions** — Postgres functions and procedures (not those an extension brought) and MySQL routines list under
+  the tables. One opens read-only: its CREATE statement highlighted, its arguments and result in the inspector; copy it,
+  or open it in a query tab to change and run it.
 - **SQL** — highlighting, autocomplete (`table.` lists its columns, `schema.` its tables). `⌘↵` runs the selection or
   the statement at the caret (a faint band marks it when the editor holds several), `⌘⇧↵` runs them all, `⌘.` stops a
   running query on any engine. A result keeps its first 50,000 rows. `⌘S` saves the tab to a

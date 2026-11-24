@@ -86,7 +86,7 @@ impl Sqlite {
             let o = Obj { r: Ref { schema: None, name: name.clone() }, name, count, approximate: false };
             if r[1] == "table" { tables.push(o) } else { views.push(o) }
         }
-        Ok(Objects { schemas: vec!["main".into()], tables, views })
+        Ok(Objects { schemas: vec!["main".into()], tables, views, functions: vec![] })
     }
 
     pub async fn set_schema(&mut self, _schema: &str) -> R<()> {
@@ -207,6 +207,10 @@ impl Sqlite {
         }
         out.ms = common::ms(t0);
         Ok(out)
+    }
+
+    pub async fn function_def(&mut self, _: &Func) -> R<String> {
+        Err("SQLite has no stored functions.".into())
     }
 
     pub fn canceller(&self) -> Canceller {

@@ -63,7 +63,7 @@ const S = {
   conn: null, info: null, sample: '',
   tabs: [], active: null, nextId: 1, queryN: 1,
   inspector: store.get('inspector', true), sidebar: true,
-  schema: { schemas: [], tables: [], views: [], columns: {} }, schemaSel: null,
+  schema: { schemas: [], tables: [], views: [], functions: [], columns: {} }, schemaSel: null,
   pane: 'items', filter: '', history: [], saved: [],
 };
 const schemaOf = t => t.ref.schema || 'main';
@@ -413,6 +413,7 @@ async function loadSchema() {
   S.schema.schemas = o.schemas && o.schemas.length ? o.schemas : ['main'];
   S.schema.tables = o.tables;
   S.schema.views = o.views;
+  S.schema.functions = o.functions || [];
   tableNameSet = new Set([...o.tables, ...o.views].map(t => t.name.toLowerCase()));
   if (!S.schema.schemas.includes(S.schemaSel)) await setSchema(pickSchema(), false);
   api.allColumns().then(c => { S.schema.columns = c; }).catch(() => {});
@@ -1145,6 +1146,12 @@ function renderItemsPane() {
     h += `<div class="side-label">Views <span>${allV.length}</span></div>`;
     h += views.length ? views.map(t => item(t, 'view')).join('') : '<div class="side-empty">No views match.</div>';
   }
+  const allF = (S.schema.functions || []).filter(inSchema);
+  if (allF.length) {
+    const fns = allF.filter(fn => fn.name.toLowerCase().includes(f));
+    h += `<div class="side-label">Functions <span>${allF.length}</span></div>`;
+    h += fns.length ? fns.map(fn => `<button class="side-item fn${act && act.kind === 'function' && act.key === fnKey(fn) ? ' active' : ''}" data-fn="${S.schema.functions.indexOf(fn)}" title="${esc(`${schemaOf(fn)}.${fn.name}(${fn.args})${fn.returns ? ' → ' + fn.returns : ''}`)}">${ic('fn')}<span class="si-name">${esc(fn.name)}${fn.args ? `<span class="si-args">(${esc(fn.args)})</span>` : ''}</span>${fn.kind === 'procedure' ? '<span class="si-count">proc</span>' : ''}</button>`).join('') : '<div class="side-empty">No functions match.</div>';
+  }
   // Searching also looks in the other schemas, so a table is found without switching first.
   if (f) {
     const others = [...S.schema.tables, ...S.schema.views].filter(t => !inSchema(t) && t.name.toLowerCase().includes(f)).slice(0, 30);
@@ -1190,11 +1197,54 @@ function renderHistoryPane() {
 
 function renderTabs() {
   $('#tabs').innerHTML = S.tabs.map(t => {
-    const icon = t.kind === 'query' ? 'code' : t.isView ? 'view' : 'table';
+    const icon = t.kind === 'query' ? 'code' : t.kind === 'function' ? 'fn' : t.isView ? 'view' : 'table';
     return `<button class="tab${t.id === S.active ? ' active' : ''}" data-tab="${t.id}" title="${esc(t.file || (t.ref ? schemaOf(t) + '.' + t.name : t.name))}" role="tab" aria-selected="${t.id === S.active}">${ic(icon)}<span class="tab-name">${esc(t.name)}</span>${pendingCount(t) ? '<span class="tab-dot" title="Uncommitted changes"></span>' : isDirty(t) ? '<span class="tab-dot" title="Unsaved changes"></span>' : ''}<span class="tab-x" data-close="${t.id}" role="button" aria-label="Close ${esc(t.name)}">${ic('x')}</span></button>`;
   }).join('') + `<button class="tab-add" data-act="new-query" title="New SQL query (${MOD}T)" aria-label="New SQL query">${ic('plus')}</button>`;
   const a = $('#tabs .tab.active');
   if (a) a.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+/* ---------- functions ---------- */
+const fnKey = fn => `fn:${schemaOf(fn)}.${fn.name}(${fn.args})#${fn.id}`;
+
+// A function or procedure opens read-only in a tab of its own: its CREATE statement, highlighted.
+async function openFunction(fn) {
+  if (!fn) return;
+  let tab = S.tabs.find(t => t.kind === 'function' && t.key === fnKey(fn));
+  if (!tab) {
+    tab = { id: S.nextId++, kind: 'function', key: fnKey(fn), fn, ref: fn.ref, name: fn.name, def: null, error: null };
+    S.tabs.push(tab);
+  }
+  S.active = tab.id;
+  renderAll();
+  if (tab.def === null && !tab.loading) {
+    tab.loading = true;
+    try { tab.def = await api.functionDef(fn); tab.error = null; }
+    catch (e) { tab.error = e.message; }
+    tab.loading = false;
+    if (cur() === tab) renderBody();
+  }
+}
+
+function renderFunctionTab(tab) {
+  const fn = tab.fn, body = $('#tabBody');
+  const sig = `${schemaOf(fn)}.${fn.name}(${fn.args})`;
+  body.innerHTML = `<div class="fn-view">
+    <div class="fn-bar">
+      <span class="chip">${fn.kind === 'procedure' ? 'procedure' : 'function'}</span>
+      <span class="fn-sig" title="${esc(sig)}">${esc(sig)}${fn.kind !== 'procedure' && fn.returns ? `<span class="fn-ret"> → ${esc(fn.returns)}</span>` : ''}</span>
+      <span class="spacer"></span>
+      <button class="btn" data-fnact="copy" ${tab.def ? '' : 'disabled'}>${ic('copy')}<span class="lbl">Copy</span></button>
+      <button class="btn" data-fnact="edit" ${tab.def ? '' : 'disabled'} title="Open the definition in a new query tab to change and run it">${ic('code')}<span class="lbl">Open in SQL editor</span></button>
+    </div>
+    ${tab.error ? `<div class="q-error"><strong>Could not read the definition</strong><code>${esc(tab.error)}</code></div>`
+      : tab.def === null ? '<div class="boot"><div><div class="spinner"></div>Reading the definition…</div></div>'
+      : `<pre class="fn-def">${highlight(tab.def.trimEnd())}</pre>`}
+  </div>`;
+  $$('[data-fnact]', body).forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.fnact === 'copy') copy(tab.def, 'Definition copied');
+    else newQueryTab(tab.def.trimEnd().replace(/;?\s*$/, ';') + '\n');
+  }));
 }
 
 function renderBody() {
@@ -1206,6 +1256,7 @@ function renderBody() {
     return;
   }
   if (tab.kind === 'query') return renderQueryTab(tab);
+  if (tab.kind === 'function') return renderFunctionTab(tab);
   const foot = '<div class="tab-foot" id="tabFoot"></div>';
   if (tab.view === 'structure') {
     if (!tab.structure) {
@@ -1377,6 +1428,17 @@ function renderInspector() {
   const tab = cur();
   const empty = (icon, msg) => `<div class="insp-empty"><div>${ic(icon)}${msg}</div></div>`;
   if (!tab) { el.innerHTML = empty('rings', 'Open a table to begin.'); return; }
+  if (tab.kind === 'function') {
+    const fn = tab.fn;
+    el.innerHTML = `<div class="insp-head">${ic('fn')}<span class="insp-title">${esc(fn.name)}</span></div>
+      <div class="insp-body"><dl class="stat-list">
+        <dt>Kind</dt><dd>${fn.kind === 'procedure' ? 'Procedure' : 'Function'}</dd>
+        <dt>Schema</dt><dd>${esc(schemaOf(fn))}</dd>
+        <dt>Arguments</dt><dd>${esc(fn.args || '—')}</dd>
+        ${fn.kind === 'procedure' ? '' : `<dt>Returns</dt><dd>${esc(fn.returns || '—')}</dd>`}
+      </dl></div>`;
+    return;
+  }
   if (tab.kind === 'table' && tab.view === 'structure') {
     const t = [...S.schema.tables, ...S.schema.views].find(x => refKey(x.ref) === tab.key);
     const s = tab.structure;
@@ -2198,6 +2260,8 @@ function wireWorkspace() {
   $('#sideList').addEventListener('click', e => {
     const o = e.target.closest('[data-ref]');
     if (o) return openTable(JSON.parse(o.dataset.ref));
+    const fn = e.target.closest('[data-fn]');
+    if (fn) return openFunction(S.schema.functions[+fn.dataset.fn]);
     const q = e.target.closest('[data-query]');
     if (q) return openSavedQuery(q.dataset.query);
     const h = e.target.closest('[data-hist]');
@@ -2616,7 +2680,7 @@ async function boot() {
   if (connect) await connectTo(connect);
   else await showOpenConnection();
   if (info.selftest) { const sc = document.createElement('script'); sc.src = 'selftest.js'; document.body.appendChild(sc); }
-  window.__trellis = { S, LOG, toggleConsole, stopQuery, exportTab, cellMenu, connectTo, openTable, newQueryTab, runActive, reviewChanges, showPalette, selectCell, startEdit, stageEdit, refreshGrid, cur, setSchema, setPane, saveQuery, openQueryText, openManager, showConnMenu, showOpenConnection, showConnForm, blankForm };
+  window.__trellis = { S, LOG, openFunction, toggleConsole, stopQuery, exportTab, cellMenu, connectTo, openTable, newQueryTab, runActive, reviewChanges, showPalette, selectCell, startEdit, stageEdit, refreshGrid, cur, setSchema, setPane, saveQuery, openQueryText, openManager, showConnMenu, showOpenConnection, showConnForm, blankForm };
 }
 
 boot();

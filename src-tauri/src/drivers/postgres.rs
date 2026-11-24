@@ -186,7 +186,24 @@ impl Pg {
             let o = Obj { r: Ref { schema: Some(g(0)), name: g(1) }, name: g(1), count: if est >= 0 { Some(est) } else { None }, approximate: true };
             if matches!(g(2).as_str(), "r" | "p" | "f") { tables.push(o) } else { views.push(o) }
         }
-        Ok(Objects { schemas, tables, views })
+        // Functions and procedures written here, not those an extension brought.
+        let functions = self
+            .rows(
+                "SELECT p.oid, n.nspname, p.proname, pg_get_function_identity_arguments(p.oid), coalesce(pg_get_function_result(p.oid), ''), p.prokind
+                 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                 WHERE p.prokind IN ('f','p')
+                   AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND n.nspname NOT LIKE 'pg_temp%'
+                   AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e')
+                 ORDER BY n.nspname, lower(p.proname), 4",
+            )
+            .await?
+            .into_iter()
+            .map(|r| {
+                let g = |i: usize| r.get(i).cloned().flatten().unwrap_or_default();
+                Func { r: Ref { schema: Some(g(1)), name: g(2) }, name: g(2), args: g(3), returns: g(4), kind: if g(5) == "p" { "procedure".into() } else { "function".into() }, id: g(0) }
+            })
+            .collect();
+        Ok(Objects { schemas, tables, views, functions })
     }
 
     /// Bare table names in the SQL editor resolve in the schema the sidebar shows.
@@ -385,6 +402,11 @@ impl Pg {
             out.columns = Some(cols);
         }
         Ok(out)
+    }
+
+    pub async fn function_def(&mut self, f: &Func) -> R<String> {
+        let oid: u32 = f.id.parse().map_err(|_| "Not a Postgres function.".to_string())?;
+        self.one(&format!("SELECT pg_get_functiondef({oid}::oid)")).await?.ok_or_else(|| format!("{} no longer exists.", f.name))
     }
 
     pub fn canceller(&self) -> Canceller {

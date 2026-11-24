@@ -19,6 +19,7 @@
     setSchema: schema => call('db_set_schema', { schema }),
     allColumns: () => call('db_all_columns'),
     structure: target => call('db_structure', { target }),
+    functionDef: target => call('db_function', { target }),
     page: (target, opts) => call('db_page', { target, opts }),
     query: sql => call('db_query', { sql }),
     cancelQuery: () => call('db_cancel'),

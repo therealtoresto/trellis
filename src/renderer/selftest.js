@@ -264,6 +264,30 @@
       return r;
     });
   };
+  // Functions list in the sidebar and open read-only, highlighted (SQLite has none; a Postgres one stands in).
+  const functions = async () => {
+    await step('functions', async () => {
+      const real = trellis.functionDef;
+      const fn = { ref: { name: 'add_one' }, name: 'add_one', args: 'i integer', returns: 'integer', kind: 'function', id: '424242' };
+      T.S.schema.functions = [fn];
+      trellis.functionDef = async f => `CREATE OR REPLACE FUNCTION public.${f.name}(${f.args})\n RETURNS integer\n LANGUAGE sql\nAS $function$SELECT i + 1$function$`;
+      try {
+        T.setPane('items'); await sleep(50);
+        const item = document.querySelector('#sideList [data-fn]');
+        const label = item && item.textContent;
+        item.click();
+        for (let i = 0; i < 40 && !(T.cur().kind === 'function' && T.cur().def); i++) await sleep(50);
+        await sleep(100);
+        const pre = document.querySelector('#tabBody .fn-def');
+        const r = { label, tab: T.cur().name, kind: T.cur().kind, highlighted: !!(pre && pre.querySelector('.t-kw')), text: pre && pre.textContent.split('\n')[0],
+          inspector: [...document.querySelectorAll('#inspector dd')].map(x => x.textContent), active: !!document.querySelector('#sideList .side-item.fn.active') };
+        document.querySelector('[data-fnact="edit"]').click(); await sleep(150);
+        r.editor = T.cur().kind === 'query' && /CREATE OR REPLACE FUNCTION/.test(T.cur().sql);
+        r.ok = /add_one\(i integer\)/.test(label) && r.kind === 'function' && r.highlighted && r.active && r.editor && r.inspector.includes('i integer');
+        return r;
+      } finally { trellis.functionDef = real; T.S.schema.functions = []; T.setPane('items'); }
+    });
+  };
   // The query log shows every statement sent, highlighted, and hides again; History is highlighted too.
   const queryLog = async () => {
     await step('query log', async () => {
@@ -365,6 +389,7 @@
     await contextMenus();
     await narrowHeader();
     await queryLog();
+    await functions();
     await trellis.selftestLog('done');
     return trellis.selftestDone();
   }
@@ -411,6 +436,7 @@
   await contextMenus();
   await narrowHeader();
   await queryLog();
+  await functions();
   await step('blob cell', async () => { const t = T.newQueryTab("SELECT x'00ff' AS b, 9007199254740993 AS big, 1.5 AS f, NULL AS n"); T.runActive(); await sleep(300); return [...document.querySelectorAll('.grid tbody td')].map(td => td.textContent); });
 
   const pg = { name: 'Shop — staging', engine: 'postgres', env: 'staging', host: '127.0.0.1', port: 55432, user: 'postgres', password: 'strata', database: 'shop', sslMode: 'prefer' };

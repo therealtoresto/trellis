@@ -183,7 +183,17 @@ impl My {
             let o = Obj { r: Ref { schema: Some(text(&r[0])), name: text(&r[1]) }, name: text(&r[1]), count: if r[3].is_null() { None } else { Some(common::row_count(Some(&r[3]))) }, approximate: true };
             if text(&r[2]) == "VIEW" { views.push(o) } else { tables.push(o) }
         }
-        Ok(Objects { schemas, tables, views })
+        let scope = match &self.database {
+            Some(d) => format!("ROUTINE_SCHEMA = {}", self.d.string(d)),
+            None => format!("ROUTINE_SCHEMA NOT IN {SYSTEM}"),
+        };
+        let functions = self
+            .rows(&format!("SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE, COALESCE(DTD_IDENTIFIER, '') FROM information_schema.ROUTINES WHERE {scope} ORDER BY ROUTINE_SCHEMA, LOWER(ROUTINE_NAME)"))
+            .await?
+            .iter()
+            .map(|r| Func { r: Ref { schema: Some(text(&r[0])), name: text(&r[1]) }, name: text(&r[1]), args: String::new(), returns: text(&r[3]), kind: text(&r[2]).to_lowercase(), id: text(&r[2]) })
+            .collect();
+        Ok(Objects { schemas, tables, views, functions })
     }
 
     /// Without a database in the connection, the schema picker also sets the default for the SQL editor.
@@ -329,6 +339,13 @@ impl My {
             out.values = Some(set.rows.iter().map(|r| (0..kinds.len()).map(|i| cell(r.as_ref(i), kinds[i])).collect()).collect());
         }
         Ok(out)
+    }
+
+    pub async fn function_def(&mut self, f: &Func) -> R<String> {
+        let kind = if f.id.eq_ignore_ascii_case("PROCEDURE") { "PROCEDURE" } else { "FUNCTION" };
+        let name = format!("{}.{}", self.d.quote(f.r.schema.as_deref().unwrap_or("")), self.d.quote(&f.r.name));
+        let rows = self.rows(&format!("SHOW CREATE {kind} {name}")).await?;
+        rows.into_iter().next().map(|r| text(&r[2])).filter(|s| !s.is_empty()).ok_or_else(|| format!("No definition for {} (the user may lack the rights to see it).", f.name))
     }
 
     pub fn canceller(&self) -> Canceller {

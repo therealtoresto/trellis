@@ -109,6 +109,12 @@ async fn db_disconnect(window: Window, state: State<'_, AppState>) -> R<()> {
     Ok(())
 }
 
+/// The CREATE statement of a function or procedure from the sidebar.
+#[tauri::command]
+async fn db_function(window: Window, state: State<'_, AppState>, target: drivers::Func) -> R<String> {
+    session(&state, &window).await?.lock().await.driver.function_def(&target).await
+}
+
 #[tauri::command]
 async fn db_objects(window: Window, state: State<'_, AppState>) -> R<drivers::Objects> {
     session(&state, &window).await?.lock().await.driver.objects().await
@@ -675,7 +681,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             conns_list, conns_save, conns_delete, conns_test,
-            db_connect, db_disconnect, db_objects, db_set_schema, db_all_columns, db_structure, db_page, db_query, db_cancel, db_preview, db_apply,
+            db_connect, db_disconnect, db_objects, db_set_schema, db_all_columns, db_structure, db_page, db_query, db_cancel, db_function, db_preview, db_apply,
             demo_reset, dialog_pick_key, dialog_open_sqlite, dialog_new_sqlite, file_open_sql, file_read_sql, file_save_sql, file_reveal, file_export_path, file_write_export,
             clipboard_write, window_new, app_info, selftest_log, selftest_done, debug_traffic_lights, selftest_resize, about_info, open_connection_window, show_welcome, debug_windows, place_lights,
             update_check, update_install,

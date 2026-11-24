@@ -92,11 +92,26 @@ pub struct Obj {
     pub approximate: bool,
 }
 
+/// A function or procedure. `id` names it to the server (a Postgres oid; on MySQL its kind), so one of several
+/// overloads opens.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Func {
+    #[serde(rename = "ref")]
+    pub r: Ref,
+    pub name: String,
+    pub args: String,
+    pub returns: String,
+    /// function or procedure
+    pub kind: String,
+    pub id: String,
+}
+
 #[derive(Serialize)]
 pub struct Objects {
     pub schemas: Vec<String>,
     pub tables: Vec<Obj>,
     pub views: Vec<Obj>,
+    pub functions: Vec<Func>,
 }
 
 #[derive(Serialize)]
@@ -328,6 +343,10 @@ impl Driver {
     }
     pub async fn set_schema(&mut self, schema: &str) -> R<()> {
         each!(self, d => d.set_schema(schema).await)
+    }
+    /// The CREATE statement of a function or procedure.
+    pub async fn function_def(&mut self, f: &Func) -> R<String> {
+        each!(self, d => d.function_def(f).await)
     }
     pub async fn structure(&mut self, r: &Ref) -> R<Structure> {
         each!(self, d => d.structure(r).await)

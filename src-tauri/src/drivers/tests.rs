@@ -119,6 +119,13 @@ async fn check_server(engine: &str, port: u16, user: &str, schema: &str, ssl: &s
         d.query(sql).await.unwrap_or_else(|e| panic!("{sql}: {e}"));
     }
     let info = d.info().await.unwrap();
+    if engine == "postgres" {
+        // A function shows in the sidebar list and opens to its CREATE statement.
+        d.query("CREATE OR REPLACE FUNCTION add_one(i integer) RETURNS integer LANGUAGE sql AS 'SELECT i + 1'").await.unwrap();
+        let f = d.objects().await.unwrap().functions.into_iter().find(|f| f.name == "add_one").expect("add_one listed");
+        assert_eq!((f.args.as_str(), f.returns.as_str(), f.kind.as_str()), ("i integer", "integer", "function"));
+        assert!(d.function_def(&f).await.unwrap().contains("CREATE OR REPLACE FUNCTION public.add_one"));
+    }
     assert!(!info.version.is_empty());
     let o = d.objects().await.unwrap();
     assert!(o.schemas.contains(&schema.to_string()));
